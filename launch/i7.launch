@@ -50,13 +50,13 @@
     <param name="surround_pointcloud_resolution" type="double" value="0.4"/>
 
 
-    <node pkg="loam_livox" type="livox_scanRegistration" name="livox_scanRegistration" >
+    <node pkg="loam_livox" type="livox_scanRegistration" name="livox_scanRegistration" output="screen" >
         <remap from="/laser_points" to="/livox/lidar" />
     </node>
 
     <node pkg="loam_livox" type="livox_laserMapping" name="livox_laserMapping" output="screen" />
     <node pkg="loam_livox" type="read_camera" name="read_camera" output="screen" />
-    <node pkg="rosbag" type="play" name="rosbag" args="-r 1.0 /home/sam/Downloads/1.bag"/>
+    <node pkg="rosbag" type="play" name="rosbag" args="-r 1.0 /home/sam/Downloads/2.bag"/>
     <!--HKU_04 HKU_IN_01 CYT_02 meixin_02-->
 
     <arg name="rviz" default="true" />

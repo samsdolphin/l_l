@@ -493,7 +493,7 @@ public:
             m_final_opt_summary = summary;
         }
         else
-            std::cout << "time Map corner and surf num are not enough" << std::endl;
+            ROS_WARN_ONCE("time Map corner and surf num are not enough");
 
         return 1;
     }

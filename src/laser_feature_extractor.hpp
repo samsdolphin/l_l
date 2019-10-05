@@ -49,7 +49,7 @@ public:
     bool        m_if_pub_each_line = false;
     int         m_lidar_type = 0; // 0 is velodyne, 1 is livox
     int         laser_scan_number = 64;
-    Livox_laser m_livox;
+    LivoxLaser livox_laser;
     ros::Time   m_init_timestamp;
 
     bool comp(int i, int j)
@@ -93,9 +93,9 @@ public:
         nh.param<double>("corner_curvature", livox_corners, 0.05);
         nh.param<double>("surface_curvature", livox_surface, 0.01);
         nh.param<double>("minimum_view_angle", minimum_view_angle, 10);
-        m_livox.thr_corner_curvature = livox_corners;
-        m_livox.thr_surface_curvature = livox_surface;
-        m_livox.minimum_view_angle = minimum_view_angle;
+        livox_laser.thr_corner_curvature = livox_corners;
+        livox_laser.thr_surface_curvature = livox_surface;
+        livox_laser.minimum_view_angle = minimum_view_angle;
 
         printf("scan line number %d \n", laser_scan_number);
 
@@ -193,7 +193,7 @@ public:
 
         pcl::PointCloud<pcl::PointXYZI> laserCloudIn;
         pcl::fromROSMsg(*laserCloudMsg, laserCloudIn);
-        int raw_pts_num = laserCloudIn.size();
+        size_t raw_pts_num = laserCloudIn.size();
 
         m_file_logger.printf(" Time: %.5f, num_raw: %d, num_filted: %d\r\n", laserCloudMsg->header.stamp.toSec(), raw_pts_num, laserCloudIn.size());
 
@@ -202,7 +202,7 @@ public:
         if (m_lidar_type)
         {
             // LIVOX LIDAR
-            laserCloudScans = m_livox.extract_laser_features(laserCloudIn, laserCloudMsg->header.stamp.toSec());
+            laserCloudScans = livox_laser.extract_laser_features(laserCloudIn, laserCloudMsg->header.stamp.toSec());
 
             if (laserCloudScans.size() <= 5) // less than 5 scan
                 return;
@@ -231,8 +231,8 @@ public:
                     end_scans = int((laser_scan_number * (i + 1)) / piece_wise) - 1;
 
                     int end_idx = laserCloudScans[end_scans].size() - 1;
-                    piece_wise_start[i] = ((float)m_livox.find_pt_info(laserCloudScans[start_scans].points[0])->idx) / m_livox.m_pts_info_vec.size();
-                    piece_wise_end[i] = ((float)m_livox.find_pt_info(laserCloudScans[end_scans].points[end_idx])->idx) / m_livox.m_pts_info_vec.size();
+                    piece_wise_start[i] = ((float)livox_laser.find_pt_info(laserCloudScans[start_scans].points[0])->idx) / livox_laser.pts_info_vec.size();
+                    piece_wise_end[i] = ((float)livox_laser.find_pt_info(laserCloudScans[end_scans].points[end_idx])->idx) / livox_laser.pts_info_vec.size();
                 }
 
                 for (int i = 0; i < piece_wise; i++)
@@ -241,7 +241,7 @@ public:
                                                     livox_surface(new pcl::PointCloud<PointType>()),
                                                     livox_full(new pcl::PointCloud<PointType>());
 
-                    m_livox.get_features(*livox_corners, *livox_surface, *livox_full, piece_wise_start[i], piece_wise_end[i]);
+                    livox_laser.get_features(*livox_corners, *livox_surface, *livox_full, piece_wise_start[i], piece_wise_end[i]);
 
                     ros::Time current_time = ros::Time::now();
 
@@ -369,9 +369,18 @@ public:
 
         for (size_t i = 5; i < cloudSize - 5; i++)
         {
-            float diffX = laserCloud->points[i - 5].x + laserCloud->points[i - 4].x + laserCloud->points[i - 3].x + laserCloud->points[i - 2].x + laserCloud->points[i - 1].x - 10 * laserCloud->points[i].x + laserCloud->points[i + 1].x + laserCloud->points[i + 2].x + laserCloud->points[i + 3].x + laserCloud->points[i + 4].x + laserCloud->points[i + 5].x;
-            float diffY = laserCloud->points[i - 5].y + laserCloud->points[i - 4].y + laserCloud->points[i - 3].y + laserCloud->points[i - 2].y + laserCloud->points[i - 1].y - 10 * laserCloud->points[i].y + laserCloud->points[i + 1].y + laserCloud->points[i + 2].y + laserCloud->points[i + 3].y + laserCloud->points[i + 4].y + laserCloud->points[i + 5].y;
-            float diffZ = laserCloud->points[i - 5].z + laserCloud->points[i - 4].z + laserCloud->points[i - 3].z + laserCloud->points[i - 2].z + laserCloud->points[i - 1].z - 10 * laserCloud->points[i].z + laserCloud->points[i + 1].z + laserCloud->points[i + 2].z + laserCloud->points[i + 3].z + laserCloud->points[i + 4].z + laserCloud->points[i + 5].z;
+            float diffX = laserCloud->points[i - 5].x + laserCloud->points[i - 4].x + laserCloud->points[i - 3].x +
+                          laserCloud->points[i - 2].x + laserCloud->points[i - 1].x - 10 * laserCloud->points[i].x +
+                          laserCloud->points[i + 1].x + laserCloud->points[i + 2].x + laserCloud->points[i + 3].x +
+                          laserCloud->points[i + 4].x + laserCloud->points[i + 5].x;
+            float diffY = laserCloud->points[i - 5].y + laserCloud->points[i - 4].y + laserCloud->points[i - 3].y +
+                          laserCloud->points[i - 2].y + laserCloud->points[i - 1].y - 10 * laserCloud->points[i].y +
+                          laserCloud->points[i + 1].y + laserCloud->points[i + 2].y + laserCloud->points[i + 3].y +
+                          laserCloud->points[i + 4].y + laserCloud->points[i + 5].y;
+            float diffZ = laserCloud->points[i - 5].z + laserCloud->points[i - 4].z + laserCloud->points[i - 3].z +
+                          laserCloud->points[i - 2].z + laserCloud->points[i - 1].z - 10 * laserCloud->points[i].z +
+                          laserCloud->points[i + 1].z + laserCloud->points[i + 2].z + laserCloud->points[i + 3].z +
+                          laserCloud->points[i + 4].z + laserCloud->points[i + 5].z;
             float diff = diffX * diffX + diffY * diffY + diffZ * diffZ;
             m_pc_curvature[i] = diff;
             m_pc_sort_idx[i] = i;
@@ -437,12 +446,12 @@ public:
 #if !IF_LIVOX_HANDLER_REMOVE
     if (m_lidar_type != 0)
     {
-        Livox_laser::Pt_infos *pt_info;
+        LivoxLaser::PtInfo *pt_info;
         for (unsigned int idx = 0; idx < cloudSize; idx++)
         {
-            pt_info = m_livox.find_pt_info(laserCloud->points[idx]);
+            pt_info = livox_laser.find_pt_info(laserCloud->points[idx]);
 
-            if (pt_info->pt_type != Livox_laser::e_pt_normal)
+            if (pt_info->pt_type != LivoxLaser::e_pt_normal)
                 m_pc_neighbor_picked[idx] = 1;
         }
     }
@@ -653,11 +662,11 @@ public:
             std::cout << "Set lidar type = velodyne" << std::endl;
         }
 
-        if (ros::param::get("livox_min_dis", m_livox.m_livox_min_allow_dis))
-            std::cout << "Set livox lidar minimum distance= " << m_livox.m_livox_min_allow_dis << std::endl;
+        if (ros::param::get("livox_min_dis", livox_laser.livox_min_allow_dis))
+            std::cout << "Set livox lidar minimum distance= " << livox_laser.livox_min_allow_dis << std::endl;
 
-        if (ros::param::get("livox_min_sigma", m_livox.m_livox_min_sigma))
-            std::cout << "Set livox lidar minimum sigama =  " << m_livox.m_livox_min_sigma << std::endl;
+        if (ros::param::get("livox_min_sigma", livox_laser.livox_min_sigma))
+            std::cout << "Set livox lidar minimum sigama =  " << livox_laser.livox_min_sigma << std::endl;
 
         std::cout << "~~~~~ End ~~~~~" << endl;
     }

@@ -3,16 +3,15 @@
 
 #include "common_tools.h"
 #include "pcl_tools.hpp"
+
 #include <opencv2/opencv.hpp>
 #include <opencv2/core/eigen.hpp>
 #include <opencv2/imgproc/types_c.h>
-//#include <pcl/filters/voxel_grid_covariance.h>
+
 #include "rapidjson/document.h"
 #include "rapidjson/filereadstream.h"
 #include "rapidjson/prettywriter.h"
 
-//#include "voxel_grid_covariance.h"
-//#include <pcl/octree/octree_pointcloud_changedetector.h>
 #include <pcl/filters/voxel_grid_covariance.h>
 #include <pcl/octree/octree_search.h>
 #include <pcl/point_cloud.h>
