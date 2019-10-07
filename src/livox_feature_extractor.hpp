@@ -6,22 +6,24 @@
 
 #define USE_HASH 1
 #define SHOW_OPENCV_VIS 0
+
 #if USE_HASH
 #include <unordered_map>
 #endif
 
 #include <Eigen/Eigen>
 #include <Eigen/Eigen>
-#include <nav_msgs/Odometry.h>
 
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
+
 #include <ros/ros.h>
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/PointCloud2.h>
+#include <nav_msgs/Odometry.h>
 #include <tf/transform_broadcaster.h>
 #include <tf/transform_datatypes.h>
 
@@ -81,13 +83,13 @@ public:
 
     struct PtInfo
     {
-        int   pt_type = e_pt_normal;
-        int   pt_label = e_label_unlabeled;
-        int   idx = 0.f;
+        int pt_type = e_pt_normal;
+        int pt_label = e_label_unlabeled;
+        int idx = 0.f;
         float raw_intensity = 0.f;
         float time_stamp = 0.0;
         float polar_angle = 0.f;
-        int   polar_direction = 0;
+        int polar_direction = 0;
         float polar_dis_sq2 = 0.f; // 点投影到2D平面，距原点距离平方 y_^2+z_^2
         float depth_sq2 = 0.f; // 点３D坐标的平方x^2+y^2+z^2
         float curvature = 0.0;
@@ -96,11 +98,7 @@ public:
         Eigen::Matrix<float, 2, 1> pt_2d_img; // project to X==1 plane
     };
 
-    // E_intensity_type   default_return_intensity_type = e_I_raw;
     E_intensity_type default_return_intensity_type = e_I_motion_blur;
-    // E_intensity_type default_return_intensity_type = e_I_scan_angle;
-    // E_intensity_type default_return_intensity_type = e_I_curvature;
-    // E_intensity_type default_return_intensity_type = e_I_view_angle;
 
     int   pcl_data_save_index = 0;
 
@@ -119,6 +117,7 @@ public:
     float minimum_view_angle = 10;
     std::vector<PtInfo> pts_info_vec;
     std::vector<PointType> raw_pts_vec;
+
 #if USE_HASH
     std::unordered_map<PointType, PtInfo *, Pt_hasher, Pt_compare> map_pt_idx; // using hash_map
     std::unordered_map<PointType, PtInfo *, Pt_hasher, Pt_compare>::iterator map_pt_idx_it;
@@ -168,7 +167,6 @@ public:
     PtInfo *find_pt_info(const T &pt)
     {
         map_pt_idx_it = map_pt_idx.find(pt);
-        //printf("Input pt is [%lf, %lf, %lf]\r\n", pt.x, pt.y, pt.z);
         if (map_pt_idx_it == map_pt_idx.end())
         {
             printf("Input pt is [%lf, %lf, %lf]\r\n", pt.x, pt.y, pt.z);
@@ -178,21 +176,25 @@ public:
         return map_pt_idx_it->second;
     }
 
-    void get_features(pcl::PointCloud<PointType> &pc_corners, pcl::PointCloud<PointType> &pc_surface, pcl::PointCloud<PointType> &pc_full_res, float minimum_blur = 0.0, float maximum_blur = 0.3)
+    void get_features(pcl::PointCloud<PointType> &pc_corners,
+                      pcl::PointCloud<PointType> &pc_surface,
+                      pcl::PointCloud<PointType> &pc_full,
+                      float minimum_blur = 0.0,
+                      float maximum_blur = 0.3)
     {
         int corner_num = 0;
         int surface_num = 0;
         int full_num = 0;
         pc_corners.resize(pts_info_vec.size());
         pc_surface.resize(pts_info_vec.size());
-        pc_full_res.resize(pts_info_vec.size());
+        pc_full.resize(pts_info_vec.size());
         float maximum_idx = maximum_blur * pts_info_vec.size();
         float minimum_idx = minimum_blur * pts_info_vec.size();
         int pt_critical_rm_mask = e_pt_000 | e_pt_nan;
+
         for (size_t i = 0; i < pts_info_vec.size(); i++)
         {
-            if (pts_info_vec[i].idx > maximum_idx ||
-                 pts_info_vec[i].idx < minimum_idx)
+            if (pts_info_vec[i].idx > maximum_idx || pts_info_vec[i].idx < minimum_idx)
                 continue;
 
             if ((pts_info_vec[i].pt_type & pt_critical_rm_mask) == 0)
@@ -204,32 +206,29 @@ public:
                     if (pts_info_vec[i].depth_sq2 < std::pow(30, 2))
                     {
                         pc_corners.points[corner_num] = raw_pts_vec[i];
-                        //set_intensity(pc_corners.points[corner_num], e_I_motion_blur);
                         pc_corners.points[corner_num].intensity = pts_info_vec[i].time_stamp;
                         corner_num++;
                     }
                 }
-                if (pts_info_vec[i].pt_label & e_label_surface)
+                else if (pts_info_vec[i].pt_label & e_label_surface)
                 {
                     if (pts_info_vec[i].depth_sq2 < std::pow(1000, 2))
                     {
                         pc_surface.points[surface_num] = raw_pts_vec[i];
-                        pc_surface.points[surface_num].intensity = float(pts_info_vec[i].time_stamp);
-                        //set_intensity(pc_surface.points[surface_num], e_I_motion_blur);
+                        pc_surface.points[surface_num].intensity = pts_info_vec[i].time_stamp;
                         surface_num++;
                     }
                 }
 
-                pc_full_res.points[full_num] = raw_pts_vec[i];
-                pc_full_res.points[full_num].intensity = pts_info_vec[i].time_stamp;
+                pc_full.points[full_num] = raw_pts_vec[i];
+                pc_full.points[full_num].intensity = pts_info_vec[i].time_stamp;
                 full_num++;
             }
         }
 
-        //printf("Get_features , corner num = %d, suface num = %d, blur from %.2f~%.2f\r\n", corner_num, surface_num, minimum_blur, maximum_blur);
         pc_corners.resize(corner_num);
         pc_surface.resize(surface_num);
-        pc_full_res.resize(full_num);
+        pc_full.resize(full_num);
     }
 
     template <typename T>
@@ -242,7 +241,7 @@ public:
             pt.intensity = pt_info->raw_intensity;
             break;
         case (e_I_motion_blur):
-            pt.intensity = ((float) pt_info->idx) / (float) input_pts_size;
+            pt.intensity = (float)(pt_info->idx / input_pts_size);
             assert(pt.intensity <= 1.0 && pt.intensity >= 0.0);
             break;
         case (e_I_motion_mix):
@@ -263,20 +262,6 @@ public:
             pt.intensity = ((float) pt_info->idx + 1) / (float) input_pts_size;
         }
         return;
-    }
-
-    template <typename T>
-    cv::Mat draw_dbg_img(cv::Mat &img, std::vector<T> &pt_list_eigen, cv::Scalar color = cv::Scalar::all(255), int radius = 3)
-    {
-        cv::Mat      res_img = img.clone();
-        unsigned int pt_size = pt_list_eigen.size();
-
-        for (unsigned int idx = 0; idx < pt_size; idx++)
-        {
-            draw_pt(res_img, pt_list_eigen[idx], color, radius);
-        }
-
-        return res_img;
     }
 
     void add_mask_of_point(PtInfo *pt_infos, const E_point_type &pt_type, int neighbor_count = 0)
@@ -307,23 +292,18 @@ public:
             add_mask_of_point(pt_info, e_pt_reflectivity_low);
     }
 
-    // compute curvature and view angle
     void compute_features()
     {
         unsigned int pts_size = raw_pts_vec.size();
-        size_t       curvature_ssd_size = 2;
-        int          critical_rm_point = e_pt_000 | e_pt_nan;
-        float        neighbor_accumulate_xyz[3] = { 0.0, 0.0, 0.0 };
+        size_t curvature_ssd_size = 2;
+        int critical_rm_point = e_pt_000 | e_pt_nan;
+        float neighbor_accumulate_xyz[3] = {0.0, 0.0, 0.0};
 
-        //cout << "Surface_thr = " << thr_surface_curvature << " , corner_thr = " << thr_corner_curvature<< " ,minimum_view_angle = " << minimum_view_angle << endl;
         for (size_t idx = curvature_ssd_size; idx < pts_size - curvature_ssd_size; idx++)
         {
             if (pts_info_vec[idx].pt_type & critical_rm_point)
-            {
                 continue;
-            }
 
-            /*********** Compute curvate ************/
             neighbor_accumulate_xyz[0] = 0.0;
             neighbor_accumulate_xyz[1] = 0.0;
             neighbor_accumulate_xyz[2] = 0.0;
@@ -333,25 +313,17 @@ public:
                 if ((pts_info_vec[idx + i].pt_type & e_pt_000) || (pts_info_vec[idx - i].pt_type & e_pt_000))
                 {
                     if (i == 1)
-                    {
                         pts_info_vec[idx].pt_label |= e_label_near_zero;
-                    }
                     else
-                    {
                         pts_info_vec[idx].pt_label = e_label_invalid;
-                    }
                     break;
                 }
                 else if ((pts_info_vec[idx + i].pt_type & e_pt_nan) || (pts_info_vec[idx - i].pt_type & e_pt_nan))
                 {
                     if (i == 1)
-                    {
                         pts_info_vec[idx].pt_label |= e_label_near_nan;
-                    }
                     else
-                    {
                         pts_info_vec[idx].pt_label = e_label_invalid;
-                    }
                     break;
                 }
                 else
@@ -363,46 +335,35 @@ public:
             }
 
             if(pts_info_vec[idx].pt_label == e_label_invalid)
-            {
                 continue;
-            }
 
             neighbor_accumulate_xyz[0] -= curvature_ssd_size * 2 * raw_pts_vec[idx].x;
             neighbor_accumulate_xyz[1] -= curvature_ssd_size * 2 * raw_pts_vec[idx].y;
             neighbor_accumulate_xyz[2] -= curvature_ssd_size * 2 * raw_pts_vec[idx].z;
-            pts_info_vec[idx].curvature = neighbor_accumulate_xyz[0] * neighbor_accumulate_xyz[0] + neighbor_accumulate_xyz[1] * neighbor_accumulate_xyz[1] +
-                                              neighbor_accumulate_xyz[2] * neighbor_accumulate_xyz[2];
+            pts_info_vec[idx].curvature = neighbor_accumulate_xyz[0] * neighbor_accumulate_xyz[0] +
+                                          neighbor_accumulate_xyz[1] * neighbor_accumulate_xyz[1] +
+                                          neighbor_accumulate_xyz[2] * neighbor_accumulate_xyz[2];
 
-            /*********** Compute plane angle ************/
-            Eigen::Matrix< float, 3, 1 > vec_a(raw_pts_vec[idx].x, raw_pts_vec[idx].y, raw_pts_vec[idx].z);
-            Eigen::Matrix< float, 3, 1 > vec_b(raw_pts_vec[idx + curvature_ssd_size].x - raw_pts_vec[idx - curvature_ssd_size].x,
-                                                raw_pts_vec[idx + curvature_ssd_size].y - raw_pts_vec[idx - curvature_ssd_size].y,
-                                                raw_pts_vec[idx + curvature_ssd_size].z - raw_pts_vec[idx - curvature_ssd_size].z);
+            Eigen::Matrix<float, 3, 1> vec_a(raw_pts_vec[idx].x, raw_pts_vec[idx].y, raw_pts_vec[idx].z);
+            Eigen::Matrix<float, 3, 1> vec_b(raw_pts_vec[idx + curvature_ssd_size].x - raw_pts_vec[idx - curvature_ssd_size].x,
+                                             raw_pts_vec[idx + curvature_ssd_size].y - raw_pts_vec[idx - curvature_ssd_size].y,
+                                             raw_pts_vec[idx + curvature_ssd_size].z - raw_pts_vec[idx - curvature_ssd_size].z);
+            
             pts_info_vec[idx].view_angle = Eigen_math::vector_angle(vec_a  , vec_b, 1) * 57.3;
 
-            //printf("Idx = %d, angle = %.2f\r\n", idx,  pts_info_vec[idx].view_angle);
             if (pts_info_vec[idx].view_angle > minimum_view_angle)
             {
-
                 if(pts_info_vec[idx].curvature < thr_surface_curvature)
-                {
                     pts_info_vec[idx].pt_label |= e_label_surface;
-                }
 
                 float sq2_diff = 0.1;
 
                 if (pts_info_vec[idx].curvature > thr_corner_curvature)
-                // if (abs(pts_info_vec[idx].view_angle - pts_info_vec[idx + curvature_ssd_size].view_angle) > edge_angle_diff ||
-                //      abs(pts_info_vec[idx].view_angle - pts_info_vec[idx - curvature_ssd_size].view_angle) > edge_angle_diff)
-                {
                     if (pts_info_vec[idx].depth_sq2 <= pts_info_vec[idx - curvature_ssd_size].depth_sq2 &&
-                         pts_info_vec[idx].depth_sq2 <= pts_info_vec[idx + curvature_ssd_size].depth_sq2)
-                    {
+                        pts_info_vec[idx].depth_sq2 <= pts_info_vec[idx + curvature_ssd_size].depth_sq2)
                         if (abs(pts_info_vec[idx].depth_sq2 - pts_info_vec[idx - curvature_ssd_size].depth_sq2) < sq2_diff * pts_info_vec[idx].depth_sq2 ||
-                             abs(pts_info_vec[idx].depth_sq2 - pts_info_vec[idx + curvature_ssd_size].depth_sq2) < sq2_diff * pts_info_vec[idx].depth_sq2)
+                            abs(pts_info_vec[idx].depth_sq2 - pts_info_vec[idx + curvature_ssd_size].depth_sq2) < sq2_diff * pts_info_vec[idx].depth_sq2)
                             pts_info_vec[idx].pt_label |= e_label_corner;
-                    }
-                }
             }
         }
     }
@@ -445,7 +406,7 @@ public:
             if (laserCloudIn.points[idx].x == 0)
             {
                 if (idx == 0)
-                    std::cout << "First point should be normal!!!" << std::endl; // TODO: handle this case.
+                    ROS_INFO_ONCE("First point should be normal!!!"); // TODO: handle this case.
                 else
                 {
                     pt_info->pt_2d_img = pts_info_vec[idx - 1].pt_2d_img;
@@ -528,128 +489,58 @@ public:
             pts_info_vec[idx].polar_angle = scan_angle;
             scan_id_index[idx] = scan_angle;
         }
-        
+
         return split_idx.size() - 1;
     }
 
-    // will be delete...
-    //    template<typename T>
-    void reorder_laser_cloud_scan(std::vector<pcl::PointCloud<pcl::PointXYZI>> &in_laserCloudScans, std::vector< std::vector<int> > &pts_mask)
-    {
-        unsigned int min_pts_per_scan = 0;
-        cout << "Before reorder" << endl;
-        //cout << "Cloud size: " << in_laserCloudScans.size() << endl;
-        //std::vector<pcl::PointCloud<PointType>> res_laser_cloud(in_laserCloudScans.size() - 2); // abandon first and last
-        //std::vector<std::vector<int>> res_pts_mask(in_laserCloudScans.size() - 2);
-        std::vector<pcl::PointCloud<pcl::PointXYZI>> res_laser_cloud(in_laserCloudScans.size()); // abandon first and last
-        std::vector< std::vector<int> >                res_pts_mask(in_laserCloudScans.size());
-        std::map< float, int > map_angle_idx;
-
-        // for (unsigned int i = 1; i < in_laserCloudScans.size() - 1; i++)
-        for (unsigned int i = 0; i < in_laserCloudScans.size() - 0; i++)
-        {
-            if (in_laserCloudScans[i].size() > min_pts_per_scan)
-            {
-                //cout << i << endl;
-                //cout << "[" << i << "] size = ";
-                //cout << in_laserCloudScans[i].size() << "  ,id = " << (int) in_laserCloudScans[i].points[0].intensity << endl;
-                map_angle_idx.insert(std::make_pair(in_laserCloudScans[i].points[0].intensity, i));
-            }
-            else
-            {
-                continue;
-            }
-        }
-
-        cout << "After reorder" << endl;
-        std::map< float, int >::iterator it;
-        int current_index = 0;
-
-        for (it = map_angle_idx.begin(); it != map_angle_idx.end(); it++)
-        {
-            //cout << "[" << current_index << "] id = " << it->first << endl;
-            if (in_laserCloudScans[it->second].size() > min_pts_per_scan)
-            {
-                res_laser_cloud[current_index] = in_laserCloudScans[it->second];
-                res_pts_mask[current_index] = pts_mask[it->second];
-                current_index++;
-            }
-        }
-
-        res_laser_cloud.resize(current_index);
-        res_pts_mask.resize(current_index);
-        //cout << "Final size = " << current_index <<endl;
-        //printf_line;
-        in_laserCloudScans = res_laser_cloud;
-        pts_mask = res_pts_mask;
-        cout << "Return size = " << pts_mask.size() << "  " << in_laserCloudScans.size() << endl;
-        return;
-    }
-
-    // Split whole point cloud into scans.
     template <typename T>
     void split_laser_scan(const int clutter_size, const pcl::PointCloud<T> &laserCloudIn,
-                           const std::vector<float> &                 scan_id_index,
-                           std::vector<pcl::PointCloud<PointType>> &laserCloudScans)
+                          const std::vector<float> &scan_id_index,
+                          std::vector<pcl::PointCloud<PointType>> &laserCloudScans)
     {
         std::vector< std::vector<int> > pts_mask;
         laserCloudScans.resize(clutter_size);
         pts_mask.resize(clutter_size);
         PointType point;
-        int       scan_idx = 0;
+        int scan_idx = 0;
 
         for (unsigned int i = 0; i < laserCloudIn.size(); i++)
         {
-
             point = laserCloudIn.points[i];
-
-            //point.intensity = (float) (scan_id_index[i]);
 
             if (i > 0 && ((scan_id_index[i]) != (scan_id_index[i - 1])))
             {
-                //std::cout << "Scan idx = " << scan_idx << " intensity = " << scan_id_index[i] << std::endl;
-                scan_idx = scan_idx + 1;
+                scan_idx++;
                 pts_mask[scan_idx].reserve(5000);
             }
 
             laserCloudScans[scan_idx].push_back(point);
             pts_mask[scan_idx].push_back(pts_info_vec[i].pt_type);
         }
-        laserCloudScans.resize(scan_idx);
+        laserCloudScans.resize(scan_idx); // 舍弃最后一个split后的数据
 
-
-        int remove_point_pt_type = e_pt_000 |
-                                   e_pt_too_near |
-                                   e_pt_nan // |
-                                 //e_circle_edge
-                                   ;
+        int remove_point_pt_type = e_pt_000 | e_pt_too_near | e_pt_nan;
 
         for (unsigned int i = 0; i < laserCloudScans.size(); i++)
         {
-            //std::cout << "Scan idx = " << i;
-            //cout << "  ,length = " << laserCloudScans[i].size();
-            //cout << "  ,intensity = " << laserCloudScans[i].points[0].intensity << std::endl;
             int scan_avail_num = 0;
             for (unsigned int idx = 0; idx < laserCloudScans[i].size(); idx++)
             {
                 if ((pts_mask[i][idx] & remove_point_pt_type) == 0)
-                //if(pts_mask[i][idx] == e_normal)
                 {
                     if (laserCloudScans[i].points[idx].x == 0)
                     {
-                        printf("Error!!! Mask = %d\r\n", pts_mask[i][idx]);
+                        ROS_WARN("Error!!! Mask = %d\r\n", pts_mask[i][idx]);
                         assert(laserCloudScans[i].points[idx].x != 0);
                         continue;
                     }
                     laserCloudScans[i].points[scan_avail_num] = laserCloudScans[i].points[idx];
-                    set_intensity(laserCloudScans[i].points[scan_avail_num], default_return_intensity_type);
+                    set_intensity(laserCloudScans[i].points[scan_avail_num], default_return_intensity_type); // intensity = idx/pts_size
                     scan_avail_num++;
-                    // cur_pt_idx++;
                 }
             }
             laserCloudScans[i].resize(scan_avail_num);
         }
-        //printf_line;
     }
 
     template <typename T>
@@ -681,9 +572,7 @@ public:
         int clutter_size = projection_scan_3d_2d(laserCloudIn, scan_id_index);
         compute_features();
         if (clutter_size == 0)
-        {
             return laserCloudScans;
-        }
         else
         {
             split_laser_scan(clutter_size, laserCloudIn, scan_id_index, laserCloudScans);

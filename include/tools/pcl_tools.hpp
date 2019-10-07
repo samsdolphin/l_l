@@ -90,10 +90,10 @@ namespace PCL_TOOLS
     }
 
 
-    template <typename TT, typename T>
-    TT eigen_to_pcl_pt(const T &pt)
+    template <typename T1, typename T2>
+    T1 eigen_to_pcl_pt(const T2 &pt)
     {
-        TT res_pt;
+        T1 res_pt;
         res_pt.x = pt(0);
         res_pt.y = pt(1);
         res_pt.z = pt(2);

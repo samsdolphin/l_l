@@ -71,11 +71,11 @@ public:
     pcl::PointCloud<pcl_pt> pcl_pc;
     DATA_TYPE m_cov_det_sqrt;
     int m_if_compute_using_pcl = false;
-    bool m_mean_need_update = true;
-    bool m_covmat_need_update = true;
-    bool m_icovmat_need_update = true;
-    bool m_pcl_voxelgrid_need_update = true;
-    size_t m_maximum_points_size = (size_t)1e4;
+    bool mean_need_update = true;
+    bool covmat_need_update = true;
+    bool icovmat_need_update = true;
+    bool pcl_voxelgrid_need_update = true;
+    size_t maximum_points_size = (size_t)1e4;
     std::mutex *m_mutex_cell;
 
     PointCloudCell()
@@ -182,21 +182,21 @@ public:
 
     void pcl_voxelgrid_update()
     {
-        if (m_pcl_voxelgrid_need_update)
+        if (pcl_voxelgrid_need_update)
         {
             m_pcl_voxel_cell.setLeafSize(200.0, 200.0, 200.0);
             m_pcl_voxel_cell.setInputCloud(pcl_pc.makeShared());
             m_pcl_voxel_cell.filter(true);
         }
-        m_pcl_voxelgrid_need_update = false;
+        pcl_voxelgrid_need_update = false;
     }
 
     void set_data_need_update(int if_update_sum = 0)
     {
-        m_mean_need_update = true;
-        m_covmat_need_update = true;
-        m_icovmat_need_update = true;
-        m_pcl_voxelgrid_need_update = true;
+        mean_need_update = true;
+        covmat_need_update = true;
+        icovmat_need_update = true;
+        pcl_voxelgrid_need_update = true;
         if (if_update_sum)
         {
             xyz_sum.setZero();
@@ -217,12 +217,12 @@ public:
 
     Eigen::Matrix<DATA_TYPE, 3, 1> get_mean()
     {
-        if (m_mean_need_update)
+        if (mean_need_update)
         {
             if (m_if_compute_using_pcl)
             {
                 pcl_voxelgrid_update();
-                m_mean_need_update = false;
+                mean_need_update = false;
                 auto leaf = m_pcl_voxel_cell.getLeaf(center);
                 assert(leaf != nullptr);
                 return leaf->getMean().template cast<DATA_TYPE>();
@@ -230,7 +230,7 @@ public:
             set_data_need_update();
             m_mean = xyz_sum / ((DATA_TYPE)(point_vec.size()));
         }
-        m_mean_need_update = false;
+        mean_need_update = false;
         return m_mean.template cast<DATA_TYPE>();
     }
 
@@ -271,7 +271,7 @@ public:
 
     Eigen::Matrix<DATA_TYPE, 3, 3> get_covmat()
     {
-        if (m_covmat_need_update)
+        if (covmat_need_update)
         {
             get_mean();
             if (m_if_compute_using_pcl)
@@ -290,13 +290,13 @@ public:
                 m_cov_mat = m_cov_mat + (point_vec[i] * point_vec[i].transpose()).template cast<COMP_TYPE>();
             robust_covmat();
         }
-        m_covmat_need_update = false;
+        covmat_need_update = false;
         return m_cov_mat.template cast<DATA_TYPE>();
     }
 
     Eigen::Matrix<DATA_TYPE, 3, 3> get_icovmat()
     {
-        if (m_icovmat_need_update)
+        if (icovmat_need_update)
         {
             get_covmat();
             if (m_if_compute_using_pcl)
@@ -310,7 +310,7 @@ public:
             if (!std::isfinite(m_icov_mat(0, 0)))
                 m_icov_mat.setIdentity();
         }
-        m_icovmat_need_update = false;
+        icovmat_need_update = false;
         return m_icov_mat.template cast<DATA_TYPE>();
     }
 
@@ -349,10 +349,10 @@ public:
         m_mutex_cell = new std::mutex();
         clear_data();
         resolution_ = res;
-        m_maximum_points_size = (int)res * 100.0;
-        point_vec.reserve(m_maximum_points_size);
+        maximum_points_size = (int)res * 100.0;
+        point_vec.reserve(maximum_points_size);
         if (m_if_compute_using_pcl)
-            pcl_pc.reserve(m_maximum_points_size);
+            pcl_pc.reserve(maximum_points_size);
         center = cell_center;
     }
 
@@ -361,10 +361,10 @@ public:
         std::unique_lock<std::mutex> lock(*m_mutex_cell);
         pcl_pc.push_back(PCL_TOOLS::eigen_to_pcl_pt<pcl_pt>(pt));
         point_vec.push_back(pt);
-        if (point_vec.size() > m_maximum_points_size)
+        if (point_vec.size() > maximum_points_size)
         {
-            m_maximum_points_size *= 10;
-            point_vec.reserve(m_maximum_points_size);
+            maximum_points_size *= 10;
+            point_vec.reserve(maximum_points_size);
         }
         xyz_sum = xyz_sum + pt.template cast<COMP_TYPE>();
 
@@ -377,7 +377,7 @@ public:
         // "The three-dimensional normal-distributions transform: an efficient representation for registration, surface analysis, and loop detection"
         int pt_size = pt_vec.size();
         clear_data();
-        point_vec.reserve(m_maximum_points_size);
+        point_vec.reserve(maximum_points_size);
         for (int i = 0; i < pt_size; i++)
             append_pt(pt_vec[i]);
         set_data_need_update();
@@ -438,7 +438,7 @@ public:
     int THETA_RES = (int)(12 * scale);
     int BETA_RES = (int)(6 * scale);
     std::mutex *m_mapping_mutex;
-    std::mutex *m_octotree_mutex;
+    std::mutex *octotree_mutex;
     std::mutex *m_mutex_addcell;
     std::string json_file_name;
     float m_ratio_nonzero_line, m_ratio_nonzero_plane;
@@ -451,8 +451,8 @@ public:
     typedef typename std::map<PT_TYPE, PC_CELL *, PCL_TOOLS::Pt_compare>::iterator MAP_PT_CELL_IT;
 #endif
 
-    MAP_PT_CELL m_map_pt_cell; // using hash_map
-    MAP_PT_CELL_IT m_map_pt_cell_it;
+    MAP_PT_CELL map_pt_cell; // using hash_map
+    MAP_PT_CELL_IT map_pt_cell_it;
 
     Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic> feature_img_line, feature_img_plane;
     Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic> feature_img_line_roi, feature_img_plane_roi;
@@ -467,7 +467,7 @@ public:
     {
         m_mapping_mutex = new std::mutex();
         m_mutex_addcell = new std::mutex();
-        m_octotree_mutex = new std::mutex();
+        octotree_mutex = new std::mutex();
         m_x_min = std::numeric_limits<DATA_TYPE>::max();
         m_y_min = std::numeric_limits<DATA_TYPE>::max();
         m_z_min = std::numeric_limits<DATA_TYPE>::max();
@@ -487,13 +487,13 @@ public:
         m_mutex_addcell->try_lock();
         m_mutex_addcell->unlock();
 
-        m_octotree_mutex->try_lock();
-        m_octotree_mutex->unlock();
+        octotree_mutex->try_lock();
+        octotree_mutex->unlock();
     }
 
     int get_cells_size()
     {
-        return m_map_pt_cell.size();
+        return map_pt_cell.size();
     }
 
     PT_TYPE find_cell_center(const PT_TYPE &pt)
@@ -510,12 +510,12 @@ public:
 
     void clear_data()
     {
-        for (MAP_PT_CELL_IT it = m_map_pt_cell.begin(); it != m_map_pt_cell.end(); it++)
+        for (MAP_PT_CELL_IT it = map_pt_cell.begin(); it != map_pt_cell.end(); it++)
         {
             it->second->clear_data();
             delete it->second;
         }
-        m_map_pt_cell.clear();
+        map_pt_cell.clear();
         pc_cell_vec.clear();
         m_cells_center->clear();
         octree.deleteTree();
@@ -547,7 +547,7 @@ public:
         m_initialized = true;
     }
 
-    void append_cloud(const std::vector<PT_TYPE> &input_pt_vec , int if_vervose = false)
+    void append_cloud(const std::vector<PT_TYPE> &input_pt_vec, int if_vervose = false)
     {
         m_timer.tic(__FUNCTION__);
         m_mapping_mutex->lock();
@@ -566,15 +566,6 @@ public:
                 cell->append_pt(input_pt_vec[i]);
             }
         }
-        if (if_vervose == false)
-        {
-            /**
-            std::cout << "Input points size: "<< input_pt_vec.size()<< ", "
-                      << "add cell number: " << get_cells_size() - current_size << ", "
-                      << "curren cell number: " << m_map_pt_cell.size() << std::endl;
-            std::cout << m_timer.toc_string(__FUNCTION__) << std::endl;
-            */
-        }
     }
 
     template <typename T>
@@ -592,17 +583,17 @@ public:
     PC_CELL *add_cell(const PT_TYPE &cell_center)
     {
         std::unique_lock<std::mutex> lock(*m_mutex_addcell);
-        MAP_PT_CELL_IT it = m_map_pt_cell.find(cell_center);
-        if (it != m_map_pt_cell.end())
+        MAP_PT_CELL_IT it = map_pt_cell.find(cell_center);
+        if (it != map_pt_cell.end())
             return it->second;
 
         PC_CELL *cell = new PC_CELL(cell_center, (DATA_TYPE)resolution_);
-        m_map_pt_cell.insert(std::make_pair(cell_center, cell));
+        map_pt_cell.insert(std::make_pair(cell_center, cell));
         if (m_initialized == false)
             m_cells_center->push_back(pcl::PointXYZ(cell->center(0), cell->center(1), cell->center(2)));
         else
         {
-            std::unique_lock<std::mutex> lock(*m_octotree_mutex);
+            std::unique_lock<std::mutex> lock(*octotree_mutex);
             octree.addPointToCloud(pcl::PointXYZ(cell->center(0), cell->center(1), cell->center(2)), m_cells_center);
         }
         pc_cell_vec.push_back(cell);
@@ -612,8 +603,8 @@ public:
     PC_CELL *find_cell(const PT_TYPE &pt, int if_add = 1)
     {
         PT_TYPE cell_center = find_cell_center(pt);
-        MAP_PT_CELL_IT it = m_map_pt_cell.find(cell_center);
-        if (it == m_map_pt_cell.end())
+        MAP_PT_CELL_IT it = map_pt_cell.find(cell_center);
+        if (it == map_pt_cell.end())
         {
             if (if_add)
             {
@@ -655,7 +646,7 @@ public:
     template <typename T>
     std::vector<PC_CELL *> find_cells_in_radius(T pt, float searchRadius = 0)
     {
-        std::unique_lock<std::mutex> lock(*m_octotree_mutex);
+        std::unique_lock<std::mutex> lock(*octotree_mutex);
         std::vector<PC_CELL *> cells_vec;
         pcl::PointXYZ searchPoint = PCL_TOOLS::eigen_to_pcl_pt<pcl::PointXYZ>(pt);
         std::vector<int> cloudNWRSearch;
@@ -678,11 +669,11 @@ public:
     std::string to_json_string(int &avail_cell_size = 0)
     {
         std::string str;
-        str.reserve(m_map_pt_cell.size() * 1e4);
+        str.reserve(map_pt_cell.size() * 1e4);
         std::stringstream str_s(str);
         str_s << "[";
         avail_cell_size = 0;
-        for (MAP_PT_CELL_IT it = m_map_pt_cell.begin(); it != m_map_pt_cell.end();)
+        for (MAP_PT_CELL_IT it = map_pt_cell.begin(); it != map_pt_cell.end();)
         {
             PointCloudCell<DATA_TYPE> *cell = it->second;
 
@@ -692,7 +683,7 @@ public:
             avail_cell_size++;
 
             it++;
-            if (it == m_map_pt_cell.end())
+            if (it == map_pt_cell.end())
                 break;
         }
         str_s << "]";
@@ -782,7 +773,7 @@ public:
             fclose(fp);
 
             std::cout << timer.toc_string("Load mapping from json file") << std::endl;
-            return m_map_pt_cell.size();
+            return map_pt_cell.size();
         }
     }
 

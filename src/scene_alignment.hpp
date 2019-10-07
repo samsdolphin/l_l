@@ -244,12 +244,12 @@ public:
         Eigen::Quaterniond transform_R = Eigen::Quaterniond::Identity();
 
         pc_reg.current_frame_index = 10000;
-        pc_reg.m_q_w_curr.setIdentity();
-        pc_reg.m_q_w_last.setIdentity();
-        pc_reg.m_t_w_last.setZero();
+        pc_reg.q_w_curr.setIdentity();
+        pc_reg.q_w_last.setIdentity();
+        pc_reg.t_w_last.setZero();
 
         pc_reg.m_t_w_incre = transform_T;
-        pc_reg.m_t_w_curr = transform_T;
+        pc_reg.t_w_curr = transform_T;
 
         pc_reg.find_out_incremental_transfrom(source_pt_line.makeShared(), source_pt_plane.makeShared(),
                                               target_pt_line.makeShared(), target_pt_plane.makeShared());
@@ -268,7 +268,7 @@ public:
             temp_a.set_point_cloud(PCL_TOOLS::pcl_pts_to_eigen_pts<PT_DATA_TYPE, pcl_pt>(all_pt_a.makeShared()));
             temp_b.set_point_cloud(PCL_TOOLS::pcl_pts_to_eigen_pts<PT_DATA_TYPE, pcl_pt>(all_pt_temp.makeShared()));
 
-            all_pt_temp = pointcloud_transfrom<double, pcl_pt>(all_pt_b, pc_reg.m_q_w_curr.toRotationMatrix(), pc_reg.m_t_w_curr);
+            all_pt_temp = pointcloud_transfrom<double, pcl_pt>(all_pt_b, pc_reg.q_w_curr.toRotationMatrix(), pc_reg.t_w_curr);
             temp_res.set_point_cloud(PCL_TOOLS::pcl_pts_to_eigen_pts<PT_DATA_TYPE, pcl_pt>(all_pt_temp.makeShared()));
 
             std::string save_path;
