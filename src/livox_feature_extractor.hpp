@@ -535,7 +535,7 @@ public:
                         continue;
                     }
                     laserCloudScans[i].points[scan_avail_num] = laserCloudScans[i].points[idx];
-                    set_intensity(laserCloudScans[i].points[scan_avail_num], default_return_intensity_type); // intensity = idx/pts_size
+                    set_intensity(laserCloudScans[i].points[scan_avail_num], default_return_intensity_type); // intensity = idx / pts_size
                     scan_avail_num++;
                 }
             }

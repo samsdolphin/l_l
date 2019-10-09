@@ -98,17 +98,17 @@ public:
     double time_pc_corner_past = 0;
     double m_time_pc_surface_past = 0;
     double m_time_pc_full = 0;
-    double m_time_odom = 0;
+    double time_odom = 0;
     double last_time_stamp = 0;
     double minimum_pt_time_stamp = 0;
     double maximum_pt_time_stamp = 1.0;
     float m_last_max_blur = 0.0;
 
     int m_odom_mode;
-    int m_matching_mode = 0;
+    int matching_mode = 0;
     int if_input_downsample_mode = 1;
     int maximum_parallel_thread;
-    int m_maximum_mapping_buff_thread = 1; // Maximum number of thead for matching buffer update
+    int maximum_mapping_buff_thread = 1; // Maximum number of thead for matching buffer update
     int maximum_history_size = 100;
     int m_maximum_pt_in_cell = 1e5;
     int m_maximum_cell_life_time = 10;
@@ -123,10 +123,10 @@ public:
 
     string pcd_save_dir_name, log_save_dir_name, loop_save_dir_name;
 
-    std::list<pcl::PointCloud<PointType>> laser_cloud_corner_history;
-    std::list<pcl::PointCloud<PointType>> laser_cloud_surface_history;
+    std::list<pcl::PointCloud<PointType>> pc_corner_history;
+    std::list<pcl::PointCloud<PointType>> pc_surface_history;
     std::list<pcl::PointCloud<PointType>> pc_full_history;
-    std::list<double> m_his_reg_error;
+    std::list<double> his_reg_error;
     Eigen::Quaterniond last_his_add_q;
     Eigen::Vector3d last_his_add_t;
 
@@ -143,8 +143,8 @@ public:
     pcl::PointCloud<PointType>::Ptr laser_cloud_corner_from_map;
     pcl::PointCloud<PointType>::Ptr laser_cloud_surf_from_map;
 
-    pcl::PointCloud<PointType>::Ptr laser_cloud_corner_from_map_lastest;
-    pcl::PointCloud<PointType>::Ptr laser_cloud_surf_from_map_lastest;
+    pcl::PointCloud<PointType>::Ptr laser_cloud_corner_from_map_latest;
+    pcl::PointCloud<PointType>::Ptr laser_cloud_surf_from_map_latest;
 
     //input & output: points in one frame. local --> global
     pcl::PointCloud<PointType>::Ptr pc_full;
@@ -221,24 +221,24 @@ public:
 
     int if_loop_closure;
     std::list<std::future<int> *> thread_pool;
-    std::list<std::future<void> *> m_thread_match_buff_refresh;
+    std::list<std::future<void> *> thread_match_buff_refresh;
 
     double m_maximum_in_fov_angle ;
     double m_maximum_pointcloud_delay_time;
     double m_maximum_search_range_corner;
     double m_maximum_search_range_surface;
     double surround_pointcloud_resolution;
-    double latest_pc_reg_time = -3e8;
-    double m_lastest_pc_matching_refresh_time = -3e8;
-    double lastest_pc_income_time = -3e8;
+    double last_pc_reg_time = -3e8;
+    double latest_pc_matching_refresh_time = -3e8;
+    double last_pc_income_time = -3e8;
 
-    std::mutex m_mutex_mapping;
+    std::mutex mutex_mapping;
     std::mutex mutex_querypointcloud;
     std::mutex mutex_buff_for_matching_corner;
     std::mutex mutex_buff_for_matching_surface;
     std::mutex m_mutex_thread_pool;
     std::mutex m_mutex_ros_pub;
-    std::mutex m_mutex_dump_full_history;
+    std::mutex mutex_dump_full_history;
 
     float pt_cell_resolution = 1.0;
     PointCloudMap<float> pt_cell_map_full;
@@ -248,7 +248,7 @@ public:
     int down_sample_replace = 1;
     ros::Publisher pub_last_corner_pts, pub_last_surface_pts;
     ros::Publisher pub_match_corner_pts, pub_match_surface_pts, pub_debug_pts, pub_pc_aft_loop;
-    std::future<void> *m_mapping_refresh_service_corner , *m_mapping_refresh_service_surface, *m_mapping_refresh_service; // Thread for mapping update
+    std::future<void> *m_mapping_refresh_service_corner , *m_mapping_refresh_service_surface, *mapping_refresh_service; // Thread for mapping update
     std::future<void> *service_pub_surround_pts_, *service_loop_detection_; // Thread for loop detection and publish surrounding pts
 
     int if_pt_in_fov(const Eigen::Matrix<double,3,1> &pt)
@@ -278,7 +278,7 @@ public:
 
     void update_buff_for_matching()
     {
-        if (m_lastest_pc_matching_refresh_time == latest_pc_reg_time)
+        if (latest_pc_matching_refresh_time == last_pc_reg_time)
             return;
         m_timer.tic("Update buff for matching");
         pcl::VoxelGrid<PointType> down_sample_filter_corner = down_sample_filter_corner_;
@@ -287,7 +287,8 @@ public:
         down_sample_filter_surface.setLeafSize(plane_resolution, plane_resolution, plane_resolution);
         pcl::PointCloud<PointType>::Ptr laser_cloud_corner_from_map(new pcl::PointCloud<PointType>());
         pcl::PointCloud<PointType>::Ptr laser_cloud_surf_from_map(new pcl::PointCloud<PointType>());
-        if (m_matching_mode)
+
+        if (matching_mode) // 0
         {
             pcl::VoxelGrid<PointType> down_sample_filter_corner = down_sample_filter_corner_;
             pcl::VoxelGrid<PointType> down_sample_filter_surface = down_sample_filter_surface_;
@@ -326,14 +327,12 @@ public:
         }
         else
         {
-            m_mutex_mapping.lock();
-            for (auto it = laser_cloud_corner_history.begin(); it != laser_cloud_corner_history.end(); it++)
+            mutex_mapping.lock();
+            for (auto it = pc_corner_history.begin(); it != pc_corner_history.end(); it++)
                 *laser_cloud_corner_from_map += (*it);
-
-            for (auto it = laser_cloud_surface_history.begin(); it != laser_cloud_surface_history.end(); it++)
+            for (auto it = pc_surface_history.begin(); it != pc_surface_history.end(); it++)
                 *laser_cloud_surf_from_map += (*it);
-
-            m_mutex_mapping.unlock();
+            mutex_mapping.unlock();
         }
 
         down_sample_filter_corner.setInputCloud(laser_cloud_corner_from_map);
@@ -355,17 +354,17 @@ public:
         if_mapping_updated_surface = false;
 
         mutex_buff_for_matching_corner.lock();
-        *laser_cloud_corner_from_map_lastest = *laser_cloud_corner_from_map;
+        *laser_cloud_corner_from_map_latest = *laser_cloud_corner_from_map;
         kdtree_corner_from_map_last = kdtree_corner_from_map;
         mutex_buff_for_matching_surface.unlock();
 
         mutex_buff_for_matching_surface.lock();
-        *laser_cloud_surf_from_map_lastest = *laser_cloud_surf_from_map;
+        *laser_cloud_surf_from_map_latest = *laser_cloud_surf_from_map;
         kdtree_surf_from_map_last = kdtree_surf_from_map;
         mutex_buff_for_matching_corner.unlock();
 
-        if ((latest_pc_reg_time > m_lastest_pc_matching_refresh_time) || (latest_pc_reg_time < 10))
-            m_lastest_pc_matching_refresh_time = latest_pc_reg_time;
+        if (last_pc_reg_time > latest_pc_matching_refresh_time || last_pc_reg_time < 10)
+            latest_pc_matching_refresh_time = last_pc_reg_time;
 
         *m_logger_matching_buff.get_ostream() << m_timer.toc_string("Update buff for matching") << std::endl;
     }
@@ -385,15 +384,15 @@ public:
         if (if_mapping_updated_corner == false)
         {
             cout << "=== Mapping is old, return lastest mapping ===" << endl;
-            *laser_cloud_corner_from_map = *laser_cloud_corner_from_map_lastest;
-            *laser_cloud_surf_from_map = *laser_cloud_surf_from_map_lastest;
+            *laser_cloud_corner_from_map = *laser_cloud_corner_from_map_latest;
+            *laser_cloud_surf_from_map = *laser_cloud_surf_from_map_latest;
             return;
         }
 
         laser_cloud_corner_from_map->clear();
         laser_cloud_surf_from_map->clear();
 
-        if (m_matching_mode)
+        if (matching_mode)
         {
             pcl::VoxelGrid<PointType> down_sample_filter_corner = down_sample_filter_corner_;
             pcl::VoxelGrid<PointType> down_sample_filter_surface = down_sample_filter_surface_;
@@ -410,7 +409,7 @@ public:
                 if (if_in_fov == 0)
                     continue;
                 corner_cell_numbers_in_fov++;
-                down_sample_filter_corner.setInputCloud(corner_cell_vec[i]->pcl_pc.makeShared());
+                down_sample_filter_corner.setInputCloud(corner_cell_vec[i]->pointcloud.makeShared());
                 down_sample_filter_corner.filter(pc_temp);
                 *laser_cloud_corner_from_map += pc_temp;
             }
@@ -421,7 +420,7 @@ public:
                 if (if_in_fov == 0)
                     continue;
                 surface_cell_numbers_in_fov++;
-                down_sample_filter_surface.setInputCloud(plane_cell_vec[i]->pcl_pc.makeShared());
+                down_sample_filter_surface.setInputCloud(plane_cell_vec[i]->pointcloud.makeShared());
                 down_sample_filter_surface.filter(pc_temp);
                 *laser_cloud_surf_from_map += pc_temp;
             }
@@ -431,16 +430,16 @@ public:
         }
         else
         {
-            for (auto it = laser_cloud_corner_history.begin(); it != laser_cloud_corner_history.end(); it++)
+            for (auto it = pc_corner_history.begin(); it != pc_corner_history.end(); it++)
                 *laser_cloud_corner_from_map += (*it);
 
-            for (auto it = laser_cloud_surface_history.begin(); it != laser_cloud_surface_history.end(); it++)
+            for (auto it = pc_surface_history.begin(); it != pc_surface_history.end(); it++)
                 *laser_cloud_surf_from_map += (*it);
         }
 
         if_mapping_updated_corner = false;
-        *laser_cloud_corner_from_map_lastest = *laser_cloud_corner_from_map;
-        *laser_cloud_surf_from_map_lastest = *laser_cloud_surf_from_map;
+        *laser_cloud_corner_from_map_latest = *laser_cloud_corner_from_map;
+        *laser_cloud_surf_from_map_latest = *laser_cloud_surf_from_map;
     }
 
     LaserMapping()
@@ -452,8 +451,8 @@ public:
         laser_cloud_corner_from_map = pcl::PointCloud<PointType>::Ptr(new pcl::PointCloud<PointType>());
         laser_cloud_surf_from_map = pcl::PointCloud<PointType>::Ptr(new pcl::PointCloud<PointType>());
 
-        laser_cloud_corner_from_map_lastest = pcl::PointCloud<PointType>::Ptr(new pcl::PointCloud<PointType>());
-        laser_cloud_surf_from_map_lastest = pcl::PointCloud<PointType>::Ptr(new pcl::PointCloud<PointType>());
+        laser_cloud_corner_from_map_latest = pcl::PointCloud<PointType>::Ptr(new pcl::PointCloud<PointType>());
+        laser_cloud_surf_from_map_latest = pcl::PointCloud<PointType>::Ptr(new pcl::PointCloud<PointType>());
 
         pc_full = pcl::PointCloud<PointType>::Ptr(new pcl::PointCloud<PointType>());
 
@@ -516,7 +515,7 @@ public:
         nh.param<int>("mapping_init_accumulate_frames", m_mapping_init_accumulate_frames, 50);
 
         nh.param<int>("odom_mode", m_odom_mode, 0);
-        nh.param<int>("matching_mode", m_matching_mode, 1);
+        nh.param<int>("matching_mode", matching_mode, 1);
         nh.param<int>("input_downsample_mode", if_input_downsample_mode, 1);
 
         nh.param<int>("maximum_parallel_thread", maximum_parallel_thread, 4);
@@ -596,64 +595,59 @@ public:
             queue_avail_data.push(data_pair);
     }
 
-    template <typename T, typename TT>
-    static void save_mat_to_json_writter(T &writer, const std::string &name, const TT &eigen_mat)
+    template <typename T1, typename T2>
+    static void save_mat_to_json_writter(T1 &writer, const std::string &name, const T2 &eigen_mat)
     {
         writer.Key(name.c_str()); // output a key,
-        writer.StartArray();        // Between StartArray()/EndArray(),
+        writer.StartArray(); // Between StartArray()/EndArray(),
         for (size_t i = 0; i < (size_t)(eigen_mat.cols() * eigen_mat.rows()); i++)
             writer.Double(eigen_mat(i));
         writer.EndArray();
     }
 
-    template <typename T, typename TT>
-    static void save_quaternion_to_json_writter(T &writer, const std::string &name, const Eigen::Quaternion<TT> & q_curr)
+    template <typename T1, typename T2>
+    static void save_quaternion_to_json_writter(T1 &writer, const std::string &name, const Eigen::Quaternion<T2> &q_curr)
     {
-      writer.Key(name.c_str());
-      writer.StartArray();
-      writer.Double(q_curr.w());
-      writer.Double(q_curr.x());
-      writer.Double(q_curr.y());
-      writer.Double(q_curr.z());
-      writer.EndArray();
+        writer.Key(name.c_str());
+        writer.StartArray();
+        writer.Double(q_curr.w());
+        writer.Double(q_curr.x());
+        writer.Double(q_curr.y());
+        writer.Double(q_curr.z());
+        writer.EndArray();
     }
 
-    template <typename T, typename TT>
-    static void save_data_vec_to_json_writter(T &writer, const std::string &name, TT & data_vec)
+    template <typename T1, typename T2>
+    static void save_data_vec_to_json_writter(T1 &writer, const std::string &name, T2 &data_vec)
     {
-      writer.Key(name.c_str());
-      writer.StartArray();
-      for (auto it = data_vec.begin(); it!=data_vec.end(); it++)
-      {
-        writer.Double(*it);
-      }
-      writer.EndArray();
+        writer.Key(name.c_str());
+        writer.StartArray();
+        for (auto it = data_vec.begin(); it!=data_vec.end(); it++)
+            writer.Double(*it);
+        writer.EndArray();
     }
 
-    void dump_pose_and_regerror(std::string file_name, Eigen::Quaterniond & q_curr,
-                                           Eigen::Vector3d & t_curr,
-                                          std::list<double> & reg_err_vec)
+    void dump_pose_and_regerror(std::string file_name,
+                                Eigen::Quaterniond &q_curr,
+                                Eigen::Vector3d &t_curr,
+                                std::list<double> &reg_err_vec)
     {
-      rapidjson::Document     document;
-      rapidjson::StringBuffer sb;
-      //rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(sb);
-      rapidjson::Writer< rapidjson::StringBuffer > writer(sb);
-      writer.StartObject();
-      writer.SetMaxDecimalPlaces(1000); // like set_precision
-      save_quaternion_to_json_writter(writer, "Q", q_curr);
-      save_mat_to_json_writter(writer, "T", t_curr);
-      save_data_vec_to_json_writter(writer, "Reg_err", reg_err_vec);
-      writer.EndObject();
-      std::fstream ofs;
-      ofs.open(file_name.c_str(), std::ios_base::out);
-      if (ofs.is_open())
-      {
-          ofs << std::string(sb.GetString()).c_str();
-          ofs.close();
-      }
-      else
-        for (int i =0;i< 109;i++)
-            break; //std::cout << "Write data to file: " << file_name << " error!!!" << std::endl;
+        rapidjson::Document document;
+        rapidjson::StringBuffer sb;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(sb);
+        writer.StartObject();
+        writer.SetMaxDecimalPlaces(1000); // like set_precision
+        save_quaternion_to_json_writter(writer, "Q", q_curr);
+        save_mat_to_json_writter(writer, "T", t_curr);
+        save_data_vec_to_json_writter(writer, "Reg_err", reg_err_vec);
+        writer.EndObject();
+        std::fstream ofs;
+        ofs.open(file_name.c_str(), std::ios_base::out);
+        if (ofs.is_open())
+        {
+            ofs << std::string(sb.GetString()).c_str();
+            ofs.close();
+        }
     }
 
     void service_loop_detection()
@@ -670,7 +664,7 @@ public:
         std::vector<PointCloudMap<float> *> pt_map_vec;
         SceneAlignment<float> scene_align;
         MappingRefine<PointType> map_rfn;
-        std::vector<std::string> m_filename_vec;
+        std::vector<std::string> filename_vec;
 
         std::map<int, std::string> map_file_name;
         Ceres_pose_graph_3d::MapOfPoses pose3d_map, pose3d_map_ori;
@@ -696,25 +690,25 @@ public:
             if (pc_full_history.size() < 0.95 * maximum_history_size)
                 continue;
 
-            m_mutex_dump_full_history.lock();
+            mutex_dump_full_history.lock();
             q_curr = q_w_curr;
             t_curr = t_w_curr;
-            reg_error_his = m_his_reg_error;
+            reg_error_his = his_reg_error;
             curren_frame_idx = current_frame_index;
             PointCloudMap<float> *pt_cell_map_temp = new PointCloudMap<float>();
             pt_cell_map_temp->set_resolution(1.0);
             pt_full.clear();
+
             for (auto it = pc_full_history.begin(); it != pc_full_history.end(); it++)
                 pt_full += (*it);
 
             pt_cell_map_temp->set_point_cloud(PCL_TOOLS::pcl_pts_to_eigen_pts<float, PointType>(pt_full.makeShared()));
-
-            m_mutex_dump_full_history.unlock();
+            mutex_dump_full_history.unlock();
 
             map_id_pc.insert(std::make_pair(map_id_pc.size(), pt_full));
-
             pose3d_vec.push_back(Ceres_pose_graph_3d::Pose3D(q_curr, t_curr));
             pose3d_map.insert(std::make_pair(pose3d_map.size(), Ceres_pose_graph_3d::Pose3D(q_curr, t_curr)));
+
             if (pose3d_vec.size() >= 2)
             {
                 Ceres_pose_graph_3d::Constraint3D temp_csn;
@@ -730,16 +724,16 @@ public:
             last_update_index = current_frame_index;
             m_timer.tic("Find loop");
             pt_cell_map_temp->analyze_mapping(1);
-            float ratio_non_zero_plane = pt_cell_map_temp->m_ratio_nonzero_plane;
-            float ratio_non_zero_line = pt_cell_map_temp->m_ratio_nonzero_line;
+            float ratio_non_zero_plane = pt_cell_map_temp->ratio_nonzero_plane;
+            float ratio_non_zero_line = pt_cell_map_temp->ratio_nonzero_line;
 
-            // Save mappgin
+            // Save mapping
             json_file_name = std::string("mapping_").append(std::to_string(curren_frame_idx)).append(".json");
             pt_cell_map_temp->save_to_file(std::string(loop_save_dir_name), json_file_name);
             pt_map_vec.push_back(pt_cell_map_temp);
 
             map_file_name.insert(std::make_pair(map_file_name.size(), std::string(loop_save_dir_name).append("/").append(json_file_name)));
-            m_filename_vec.push_back(std::string(loop_save_dir_name).append("/").append(json_file_name)) ;
+            filename_vec.push_back(std::string(loop_save_dir_name).append("/").append(json_file_name)) ;
             float sim_plane_res_cv = 0, sim_plane_res = 0;
             float sim_line_res_cv = 0, sim_line_res = 0;
             float sim_plane_res_roi = 0, sim_line_res_roi = 0;
@@ -747,10 +741,10 @@ public:
 
             for (size_t his = 0; his < pt_map_vec.size(); his++)
             {
-                float ratio_non_zero_plane_his = pt_map_vec[his]->m_ratio_nonzero_plane;
-                float ratio_non_zero_line_his = pt_map_vec[his]->m_ratio_nonzero_line;
+                float ratio_non_zero_plane_his = pt_map_vec[his]->ratio_nonzero_plane;
+                float ratio_non_zero_line_his = pt_map_vec[his]->ratio_nonzero_line;
 
-                if ((ratio_non_zero_plane_his < avail_ratio_plane) && (ratio_non_zero_line_his < avail_ratio_line))
+                if (ratio_non_zero_plane_his < avail_ratio_plane && ratio_non_zero_line_his < avail_ratio_line)
                     continue;
 
                 if (abs(pt_map_vec[his]->roi_range - pt_cell_map_temp->roi_range) > 5.0)
@@ -768,7 +762,7 @@ public:
                     sim_line_res_roi = pt_cell_map_temp->max_similiarity_of_two_image(pt_cell_map_temp->feature_img_line_roi,
                                                                                       pt_map_vec[his]->feature_img_line_roi);
 
-                    if (((sim_line_res_roi > 0.80) && (sim_plane_res_roi > 0.90)) || (sim_plane_res_roi > 0.95))
+                    if ((sim_line_res_roi > 0.80 && sim_plane_res_roi > 0.90) || (sim_plane_res_roi > 0.95))
                     {
                         printf("Inlier loop detection wait ICP to find the transfrom\r\n");
                         fprintf(fp, "Inlier loop detection wait ICP to find the transfrom\r\n");
@@ -778,13 +772,13 @@ public:
                         continue;
 
                     printf("----------------------------\r\n");
-                    printf("%s -- %s\r\n", m_filename_vec[pt_map_vec.size() - 1].c_str(), m_filename_vec[his].c_str());
+                    printf("%s -- %s\r\n", filename_vec[pt_map_vec.size() - 1].c_str(), filename_vec[his].c_str());
                     printf("Nonzero_ratio %.3f , %.3f, %.3f, %.3f \r\n ", ratio_non_zero_plane, ratio_non_zero_line, ratio_non_zero_plane_his, ratio_non_zero_line_his);
                     printf("Similarity = %.3f , %.3f, %.3f, %.3f\r\n", sim_line_res, sim_plane_res, sim_line_res_cv, sim_plane_res_cv);
                     printf(" Roi similarity [%.2f, %.2f] = %.3f , %.3f \r\n", pt_cell_map_temp->roi_range, pt_map_vec[his]->roi_range, sim_line_res_roi, sim_plane_res_roi);
 
                     fprintf(fp, "----------------------------\r\n");
-                    fprintf(fp, "%s -- %s\r\n", m_filename_vec[pt_map_vec.size() - 1].c_str(), m_filename_vec[his].c_str());
+                    fprintf(fp, "%s -- %s\r\n", filename_vec[pt_map_vec.size() - 1].c_str(), filename_vec[his].c_str());
                     fprintf(fp, "Nonzero_ratio %.3f , %.3f, %.3f, %.3f \r\n ", ratio_non_zero_plane, ratio_non_zero_line, ratio_non_zero_plane_his, ratio_non_zero_line_his);
                     fprintf(fp, "Similarity = %.3f , %.3f, %.3f, %.3f\r\n", sim_line_res, sim_plane_res, sim_line_res_cv, sim_plane_res_cv);
                     fprintf(fp, "Roi similarity [%.2f, %.2f] = %.3f , %.3f \r\n", pt_cell_map_temp->roi_range, pt_map_vec[his]->roi_range, sim_line_res_roi, sim_plane_res_roi);
@@ -792,21 +786,21 @@ public:
 
                     PointCloudMap<float> *pt_cell_map_his = new PointCloudMap<float>();
                     pt_cell_map_his->set_resolution(1.0);
-                    pt_cell_map_his->set_point_cloud(pt_cell_map_his->load_pts_from_file(m_filename_vec[his]));
+                    pt_cell_map_his->set_point_cloud(pt_cell_map_his->load_pts_from_file(filename_vec[his]));
                     pt_cell_map_his->analyze_mapping(1);
                     scene_align.set_downsample_resolution(0.1, 0.1);
                     double ICP_SCORE = scene_align.find_tranfrom_of_two_mappings(pt_cell_map_his, pt_cell_map_temp, 1);
                     pt_cell_map_his->clear_data();
                     delete pt_cell_map_his;
-                    if (scene_align.pc_reg.m_inlier_final_threshold > 1.0)
+                    if (scene_align.pc_reg.inlier_final_threshold > 1.0)
                         his += 10;
 
-                    printf("ICP inlier threshold = %lf, %lf\r\n", ICP_SCORE, scene_align.pc_reg.m_inlier_final_threshold);
+                    printf("ICP inlier threshold = %lf, %lf\r\n", ICP_SCORE, scene_align.pc_reg.inlier_final_threshold);
                     printf("%s\r\n", scene_align.pc_reg.m_final_opt_summary.BriefReport().c_str());
-
-                    fprintf(fp, "ICP inlier threshold = %lf, %lf\r\n", ICP_SCORE, scene_align.pc_reg.m_inlier_final_threshold);
+                    fprintf(fp, "ICP inlier threshold = %lf, %lf\r\n", ICP_SCORE, scene_align.pc_reg.inlier_final_threshold);
                     fprintf(fp, "%s\r\n", scene_align.pc_reg.m_final_opt_summary.BriefReport().c_str());
-                    if (scene_align.pc_reg.m_inlier_final_threshold < 0.35)
+                    
+                    if (scene_align.pc_reg.inlier_final_threshold < 0.35)
                     {
                         printf("I believe this is true loop.\r\n");
                         fprintf(fp, "I believe this is true loop.\r\n");
@@ -1008,16 +1002,16 @@ public:
 
     int if_matchbuff_and_pc_sync(float point_cloud_current_timestamp)
     {
-        if (m_lastest_pc_matching_refresh_time < 0)
+        if (latest_pc_matching_refresh_time < 0)
             return 1;
-        if (point_cloud_current_timestamp - m_lastest_pc_matching_refresh_time < m_maximum_pointcloud_delay_time)
+        if (point_cloud_current_timestamp - latest_pc_matching_refresh_time < m_maximum_pointcloud_delay_time)
             return 1;
-        if (latest_pc_reg_time == m_lastest_pc_matching_refresh_time)  // All is processed
+        if (last_pc_reg_time == latest_pc_matching_refresh_time)  // All is processed
             return 1;
         printf("****** Current pc timestamp = %.3f, lastest buff timestamp = %.3f, lastest_pc_reg_time = %.3f ******\r\n",
                 point_cloud_current_timestamp,
-                m_lastest_pc_matching_refresh_time,
-                latest_pc_reg_time);
+                latest_pc_matching_refresh_time,
+                last_pc_reg_time);
 
         return 0;
     }
@@ -1042,11 +1036,11 @@ public:
         find_min_max_intensity(current_pc_full.makeShared(), min_t, max_t);
 
         double point_cloud_current_timestamp = min_t;
-        if (point_cloud_current_timestamp > lastest_pc_income_time)
-            lastest_pc_income_time = point_cloud_current_timestamp;
+        if (point_cloud_current_timestamp > last_pc_income_time)
+            last_pc_income_time = point_cloud_current_timestamp;
+        point_cloud_current_timestamp = last_pc_income_time;
 
-        point_cloud_current_timestamp = lastest_pc_income_time;
-        m_time_odom = last_time_stamp;
+        time_odom = last_time_stamp;
         minimum_pt_time_stamp = last_time_stamp;
         maximum_pt_time_stamp = max_t;
         last_time_stamp = max_t;
@@ -1090,12 +1084,12 @@ public:
         pcl::PointCloud<PointType>::Ptr laser_cloud_surf_from_map(new pcl::PointCloud<PointType>());
 
         mutex_buff_for_matching_corner.lock();
-        *laser_cloud_corner_from_map = *laser_cloud_corner_from_map_lastest;
+        *laser_cloud_corner_from_map = *laser_cloud_corner_from_map_latest;
         kdtree_corner_from_map = kdtree_corner_from_map_last;
         mutex_buff_for_matching_surface.unlock();
 
         mutex_buff_for_matching_surface.lock();
-        *laser_cloud_surf_from_map = *laser_cloud_surf_from_map_lastest;
+        *laser_cloud_surf_from_map = *laser_cloud_surf_from_map_latest;
         kdtree_surf_from_map = kdtree_surf_from_map_last;
         mutex_buff_for_matching_corner.unlock();
 
@@ -1140,42 +1134,42 @@ public:
 
         pc_reg.pointcloudAssociateToMap(current_pc_full, current_pc_full, g_if_undistore);
 
-        m_mutex_mapping.lock();
+        mutex_mapping.lock();
 
-        if (laser_cloud_corner_history.size() < (size_t)maximum_history_size ||
+        if (pc_corner_history.size() < (size_t)maximum_history_size ||
             t_diff > history_add_t_step ||
             r_diff > history_add_angle_step * 57.3)
         {
             last_his_add_q = q_w_curr;
             last_his_add_t = t_w_curr;
 
-            laser_cloud_corner_history.push_back(*pc_new_feature_corners);
-            laser_cloud_surface_history.push_back(*pc_new_feature_surface);
-            m_mutex_dump_full_history.lock();
+            pc_corner_history.push_back(*pc_new_feature_corners);
+            pc_surface_history.push_back(*pc_new_feature_surface);
+            mutex_dump_full_history.lock();
             pc_full_history.push_back(current_pc_full);
-            m_his_reg_error.push_back(pc_reg.m_inlier_final_threshold);
-            m_mutex_dump_full_history.unlock();
+            his_reg_error.push_back(pc_reg.inlier_final_threshold);
+            mutex_dump_full_history.unlock();
         }
 
-        if (laser_cloud_corner_history.size() > (size_t)maximum_history_size)
+        if (pc_corner_history.size() > (size_t)maximum_history_size)
         {
-            (laser_cloud_corner_history.front()).clear();
-            laser_cloud_corner_history.pop_front();
+            (pc_corner_history.front()).clear();
+            pc_corner_history.pop_front();
         }
 
-        if (laser_cloud_surface_history.size() > (size_t)maximum_history_size)
+        if (pc_surface_history.size() > (size_t)maximum_history_size)
         {
-            (laser_cloud_surface_history.front()).clear();
-            laser_cloud_surface_history.pop_front();
+            (pc_surface_history.front()).clear();
+            pc_surface_history.pop_front();
         }
 
         if (pc_full_history.size() > (size_t)maximum_history_size)
         {
-            m_mutex_dump_full_history.lock();
+            mutex_dump_full_history.lock();
             (pc_full_history.front()).clear();
             pc_full_history.pop_front();
-            m_his_reg_error.pop_front();
-            m_mutex_dump_full_history.unlock();
+            his_reg_error.pop_front();
+            mutex_dump_full_history.unlock();
         }
 
         if_mapping_updated_corner = true;
@@ -1186,11 +1180,11 @@ public:
 
         *(logger_common.get_ostream()) << "New added regtime "<< point_cloud_current_timestamp << endl;
 
-        if ((latest_pc_reg_time < point_cloud_current_timestamp) || (point_cloud_current_timestamp < 10.0))
+        if (last_pc_reg_time < point_cloud_current_timestamp || point_cloud_current_timestamp < 10.0)
         {
             q_w_curr = pc_reg.q_w_curr;
             t_w_curr = pc_reg.t_w_curr;
-            latest_pc_reg_time = point_cloud_current_timestamp;
+            last_pc_reg_time = point_cloud_current_timestamp;
         }
         else
             *(logger_common.get_ostream()) << "***** older update, reject update pose *****" << endl;
@@ -1198,18 +1192,18 @@ public:
         *(logger_pcd.get_ostream()) << "--------------------" << endl;
         logger_pcd.printf("Curr_Q = %f,%f,%f,%f\r\n", q_w_curr.w(), q_w_curr.x(), q_w_curr.y(), q_w_curr.z());
         logger_pcd.printf("Curr_T = %f,%f,%f\r\n", t_w_curr(0), t_w_curr(1), t_w_curr(2));
-        logger_pcd.printf("Incre_Q = %f,%f,%f,%f\r\n", pc_reg.m_q_w_incre.w(), pc_reg.m_q_w_incre.x(), pc_reg.m_q_w_incre.y(), pc_reg.m_q_w_incre.z());
-        logger_pcd.printf("Incre_T = %f,%f,%f\r\n", pc_reg.m_t_w_incre(0), pc_reg.m_t_w_incre(1), pc_reg.m_t_w_incre(2));
+        logger_pcd.printf("Incre_Q = %f,%f,%f,%f\r\n", pc_reg.q_w_incre.w(), pc_reg.q_w_incre.x(), pc_reg.q_w_incre.y(), pc_reg.q_w_incre.z());
+        logger_pcd.printf("Incre_T = %f,%f,%f\r\n", pc_reg.t_w_incre(0), pc_reg.t_w_incre(1), pc_reg.t_w_incre(2));
         logger_pcd.printf("Cost=%f,blk_size = %d \r\n", m_final_opt_summary.final_cost, m_final_opt_summary.num_residual_blocks);
         *(logger_pcd.get_ostream()) << m_final_opt_summary.BriefReport() << endl;
 
-        m_mutex_mapping.unlock();
+        mutex_mapping.unlock();
 
-        if (m_thread_match_buff_refresh.size() < (size_t)m_maximum_mapping_buff_thread)
+        if (thread_match_buff_refresh.size() < (size_t)maximum_mapping_buff_thread)
         {
-            std::future<void> *m_mapping_refresh_service = 
+            std::future<void> *mapping_refresh_service = 
                 new std::future<void>(std::async(std::launch::async, &LaserMapping::service_update_buff_for_matching, this));
-            m_thread_match_buff_refresh.push_back(m_mapping_refresh_service);
+            thread_match_buff_refresh.push_back(mapping_refresh_service);
         }
 
         pt_cell_map_full.append_cloud(PCL_TOOLS::pcl_pts_to_eigen_pts<float, PointType>(current_pc_full.makeShared()));

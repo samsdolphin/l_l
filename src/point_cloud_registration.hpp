@@ -67,8 +67,8 @@ public:
     Eigen::Quaterniond q_w_curr, q_w_last;
     Eigen::Vector3d t_w_curr, t_w_last;
 
-    Eigen::Map<Eigen::Quaterniond> m_q_w_incre = Eigen::Map<Eigen::Quaterniond>(para_buffer_incremental);
-    Eigen::Map<Eigen::Vector3d> m_t_w_incre = Eigen::Map<Eigen::Vector3d>(para_buffer_incremental + 4);
+    Eigen::Map<Eigen::Quaterniond> q_w_incre = Eigen::Map<Eigen::Quaterniond>(para_buffer_incremental);
+    Eigen::Map<Eigen::Vector3d> t_w_incre = Eigen::Map<Eigen::Vector3d>(para_buffer_incremental + 4);
 
     COMMON_TOOLS::File_logger *logger_common;
     COMMON_TOOLS::File_logger *logger_pcd;
@@ -88,10 +88,10 @@ public:
     double m_minimum_icp_R_diff = 0.01;
     double m_minimum_icp_T_diff = 0.01;
 
-    double m_inliner_dis = 0.02;
+    double inliner_dis = 0.02;
     double m_inlier_ratio = 0.80;
 
-    double m_inlier_final_threshold;
+    double inlier_final_threshold;
     ceres::Solver::Summary summary;
     ceres::Solver::Summary m_final_opt_summary;
 
@@ -415,11 +415,11 @@ public:
                     problem.Evaluate(eval_options, &total_cost, &residuals, nullptr, nullptr);
 
                     double inliner_ratio_threshold = compute_inlier_residual_threshold(residuals, m_inlier_ratio);
-                    m_inlier_final_threshold = std::max(m_inliner_dis, inliner_ratio_threshold);
+                    inlier_final_threshold = std::max(inliner_dis, inliner_ratio_threshold);
 
                     for (unsigned int i = 0; i < residual_block_ids.size(); i++)
                     {   
-                        if ((fabs(residuals[3 * i + 0]) + fabs(residuals[3 * i + 1]) + fabs(residuals[3 * i + 2])) >  m_inlier_final_threshold) // std::min(1.0, 10 * avr_cost)
+                        if ((fabs(residuals[3 * i + 0]) + fabs(residuals[3 * i + 1]) + fabs(residuals[3 * i + 2])) >  inlier_final_threshold) // std::min(1.0, 10 * avr_cost)
                             problem.RemoveResidualBlock(residual_block_ids[i]);
                         else
                             residual_block_ids_bak.push_back(residual_block_ids[i]);
@@ -474,7 +474,7 @@ public:
 
             logger_common->printf("Motion blur = %d | ", if_motion_deblur);
             logger_common->printf("Cost = %.5f| inlier_thr = %.2f |blk_size = %d | corner_num = %d | surf_num = %d | angle dis = %.2f | T dis = %.2f \r\n",
-                                     minimize_cost, m_inlier_final_threshold, summary.num_residual_blocks, corner_avail_num, surf_avail_num, angular_diff, t_diff);
+                                     minimize_cost, inlier_final_threshold, summary.num_residual_blocks, corner_avail_num, surf_avail_num, angular_diff, t_diff);
             if (angular_diff > para_max_angular_rate || minimize_cost > m_max_final_cost)
             {
                 ROS_WARN("angular_diff > para_max_angular_rate OR minimize_cost > m_max_final_cost");
@@ -495,13 +495,13 @@ public:
         return 1;
     }
 
-    int find_out_incremental_transfrom(pcl::PointCloud<PointType>::Ptr laser_cloud_corner_from_map,
-                                       pcl::PointCloud<PointType>::Ptr laser_cloud_surf_from_map,
-                                       pcl::PointCloud<PointType>::Ptr laser_cloud_corner_from_map_filtered,
-                                       pcl::PointCloud<PointType>::Ptr laser_cloud_surf_from_map_filtered)
+    int find_out_incremental_transfrom(pcl::PointCloud<PointType>::Ptr source_pt_line,
+                                       pcl::PointCloud<PointType>::Ptr source_pt_plane,
+                                       pcl::PointCloud<PointType>::Ptr target_pt_line,
+                                       pcl::PointCloud<PointType>::Ptr target_pt_plane)
     {
-        pcl::PointCloud<PointType> _laser_cloud_corner_from_map = *laser_cloud_corner_from_map;
-        pcl::PointCloud<PointType> _laser_cloud_surf_from_map = *laser_cloud_surf_from_map;
+        pcl::PointCloud<PointType> _laser_cloud_corner_from_map = *source_pt_line;
+        pcl::PointCloud<PointType> _laser_cloud_surf_from_map = *source_pt_plane;
         if (_laser_cloud_corner_from_map.points.size() && _laser_cloud_surf_from_map.points.size())
         {
             kdtree_corner_from_map_.setInputCloud(_laser_cloud_corner_from_map.makeShared());
@@ -510,12 +510,12 @@ public:
         else
             return 1;
 
-        return find_out_incremental_transfrom(laser_cloud_corner_from_map,
-                                              laser_cloud_surf_from_map,
+        return find_out_incremental_transfrom(source_pt_line,
+                                              source_pt_plane,
                                               kdtree_corner_from_map_,
                                               kdtree_surf_from_map_,
-                                              laser_cloud_corner_from_map_filtered,
-                                              laser_cloud_surf_from_map_filtered);
+                                              target_pt_line,
+                                              target_pt_plane);
     }
 
     void compute_interpolatation_rodrigue(const Eigen::Quaterniond &q_in,
@@ -549,8 +549,8 @@ public:
         {
             if (interpolate_s > 1.0 || interpolate_s < 0.0)
                 printf("Input interpolate_s = %.5f\r\n", interpolate_s);
-            Eigen::Quaterniond interpolate_q = m_q_I.slerp(interpolate_s * BLUR_SCALE, m_q_w_incre);
-            Eigen::Vector3d interpolate_T = m_t_w_incre * (interpolate_s * BLUR_SCALE);
+            Eigen::Quaterniond interpolate_q = m_q_I.slerp(interpolate_s * BLUR_SCALE, q_w_incre);
+            Eigen::Vector3d interpolate_T = t_w_incre * (interpolate_s * BLUR_SCALE);
             point_w = q_w_last * (interpolate_q * point_curr + interpolate_T) + t_w_last;
         }
         po->x = point_w.x();

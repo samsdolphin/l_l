@@ -107,22 +107,20 @@ namespace PCL_TOOLS
         pcl_pc_vec.resize(eigen_pt_vec.size());
         for (size_t i = 0; i< eigen_pt_vec.size() ; i++)
         {
-            pcl_pc_vec[ i ] = eigen_to_pcl_pt< PointType >(eigen_pt_vec[ i ]);
+            pcl_pc_vec[i] = eigen_to_pcl_pt<PointType>(eigen_pt_vec[i]);
         }
         return pcl_pc_vec;
     }
 
 
-    template < typename T, typename PointType >
-    pcl::PointCloud< PointType > pointcloud_transfrom(pcl::PointCloud< PointType > pcl_pt_in, Eigen::Matrix< T, 3, 3 > tranfrom_R, Eigen::Matrix< T, 3, 1 > tranfrom_T)
+    template <typename T, typename PointType>
+    pcl::PointCloud<PointType> pointcloud_transfrom(pcl::PointCloud<PointType> pcl_pt_in, Eigen::Matrix<T, 3, 3> tranfrom_R, Eigen::Matrix<T, 3, 1> tranfrom_T)
     {
-        pcl::PointCloud< PointType > pcl_pc_res;
+        pcl::PointCloud<PointType> pcl_pc_res;
         pcl_pc_res.resize(pcl_pt_in.size());
-        //cout << "Pointcloud_transfrom_T: \r\n " << tranfrom_T.transpose() << endl;
-        //cout << "Pointcloud_transfrom_R: \r\n " << tranfrom_R << endl;
         for (size_t i = 0; i < pcl_pt_in.size(); i++)
         {
-            auto eigen_pt = PCL_TOOLS::pcl_pt_to_eigen< T, PointType >(pcl_pt_in.points[ i ]);
+            auto eigen_pt = PCL_TOOLS::pcl_pt_to_eigen<T, PointType>(pcl_pt_in.points[i]);
             pcl_pc_res.points.push_back(PCL_TOOLS::eigen_to_pcl_pt< PointType>(tranfrom_R * eigen_pt + tranfrom_T));
         }
         return pcl_pc_res;
@@ -325,12 +323,12 @@ namespace PCL_TOOLS
         pt_out.resize(size);
         for (int i = 0; i < size; i++)
         {
-            min_val = fminf(min_val, pt_in[ i ].intensity);
-            max_val = fmaxf(max_val, pt_in[ i ].intensity);
-            pt_out[ i ].x = pt_in[ i ].x;
-            pt_out[ i ].y = pt_in[ i ].y;
-            pt_out[ i ].z = pt_in[ i ].z;
-            pt_out[ i ].a = alpha;
+            min_val = fminf(min_val, pt_in[i].intensity);
+            max_val = fmaxf(max_val, pt_in[i].intensity);
+            pt_out[i].x = pt_in[i].x;
+            pt_out[i].y = pt_in[i].y;
+            pt_out[i].z = pt_in[i].z;
+            pt_out[i].a = alpha;
         }
         std::cout << "Input point size = " << size << std::endl;
         printf("Intensity min_max value =  [%.2f, %.2f] \r\n", min_val, max_val);
@@ -342,30 +340,26 @@ namespace PCL_TOOLS
         for (int i = 0; i < size; i++)
         {
             r = g = b = 0;
-            h = 240.0 * (pt_in[ i ].intensity - min_val) / max_min_val_diff;
+            h = 240.0 * (pt_in[i].intensity - min_val) / max_min_val_diff;
             hsv2rgb(h, s, v, r, g, b);
             //cout << "[" << h << " ," << s << " ," << v << " ] ";
             //cout << "[" << (int) r << " ," << (int) g << " ," << (int) b << " ]" << endl;
-            pt_out[ i ].r = r;
-            pt_out[ i ].g = g;
-            pt_out[ i ].b = b;
+            pt_out[i].r = r;
+            pt_out[i].g = g;
+            pt_out[i].b = b;
         }
         return pt_out;
     }
 
-    template < typename T, typename PointType >
-    vector< Eigen::Matrix< T, 3, 1 > > pcl_pts_to_eigen_pts(const typename pcl::PointCloud< PointType >::Ptr input_cloud)
+    template <typename T, typename PointType>
+    vector<Eigen::Matrix<T, 3, 1>> pcl_pts_to_eigen_pts(const typename pcl::PointCloud<PointType>::Ptr input_cloud)
     {
-        vector< Eigen::Matrix< T, 3, 1 > > out_res;
-        size_t                             pc_size = input_cloud->size();
+        vector<Eigen::Matrix<T, 3, 1>> out_res;
+        size_t pc_size = input_cloud->size();
         out_res.resize(pc_size);
         for (size_t i = 0; i < pc_size; i++)
-        {
-            //out_res[ i ] << input_cloud->points[ i ]x, input_cloud->points[ i ].y, input_cloud->points[ i ].z;
             out_res[i] << input_cloud->points[i].x, input_cloud->points[i].y, input_cloud->points[i].z;
-        }
         return out_res;
     }
-
 } // namespace PCL_TOOLS
 #endif

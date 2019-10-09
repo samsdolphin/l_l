@@ -344,11 +344,11 @@ template <typename PointType>
 class MappingRefine
 {
 public:
-    pcl::VoxelGrid<PointType> m_down_sample_filter;
+    pcl::VoxelGrid<PointType> down_sample_filter;
 
     Ceres_pose_graph_3d::MapOfPoses pose3d_map_oir, pose3d_map_opm;
     pcl::PointCloud<PointType> m_pts_aft_refind;
-    float m_down_sample_res = 0.2;
+    float down_sample_res = 0.2;
     int m_step_skip = 2;
     std::string m_save_path;
 
@@ -359,8 +359,8 @@ public:
 
     void set_down_sample_resolution(float res)
     {
-        m_down_sample_res = res;
-        m_down_sample_filter.setLeafSize(res, res, res);
+        down_sample_res = res;
+        down_sample_filter.setLeafSize(res, res, res);
     }
 
     void set_save_dir(std::string & path_name)
@@ -456,8 +456,8 @@ public:
                 pt_cell_temp.save_to_file(m_save_path, std::string("/refined_").append(std::to_string(it->first)).append(".json"));
                 pt_cell_temp.clear_data();
             }
-            m_down_sample_filter.setInputCloud(pcl_pts.makeShared());
-            m_down_sample_filter.filter(pcl_pts);
+            down_sample_filter.setInputCloud(pcl_pts.makeShared());
+            down_sample_filter.filter(pcl_pts);
             m_pts_aft_refind += pcl_pts;
             std::next(it, m_step_skip);
         }
@@ -498,8 +498,8 @@ public:
         }
         refine_mapping<pcl::PointXYZ>(map_idx_pc, pose3d_map_oir, pose3d_map_opm, if_save);
 
-        m_down_sample_filter.setInputCloud(m_pts_aft_refind.makeShared());
-        m_down_sample_filter.filter(m_pts_aft_refind);
+        down_sample_filter.setInputCloud(m_pts_aft_refind.makeShared());
+        down_sample_filter.filter(m_pts_aft_refind);
         pt_cell_full.set_resolution(10.0);
         pt_cell_full.set_point_cloud(PCL_TOOLS::pcl_pts_to_eigen_pts<float, pcl::PointXYZ>(m_pts_aft_refind.makeShared()));
         pt_cell_full.save_to_file(save_path_name, "mapping_refined.json");

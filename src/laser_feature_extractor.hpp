@@ -197,7 +197,7 @@ public:
 
         m_file_logger.printf(" Time: %.5f, num_raw: %d, num_filted: %d\r\n", laserCloudMsg->header.stamp.toSec(), raw_pts_num, laserCloudIn.size());
 
-        laserCloudScans = livox_laser.extract_laser_features(laserCloudIn, laserCloudMsg->header.stamp.toSec());
+        laserCloudScans = livox_laser.extract_laser_features(laserCloudIn, laserCloudMsg->header.stamp.toSec()); // intensity = idx / pts_size
 
         if (laserCloudScans.size() <= 5) // less than 5 split
             return;
@@ -235,7 +235,7 @@ public:
                                                 livox_surface(new pcl::PointCloud<PointType>()),
                                                 livox_full(new pcl::PointCloud<PointType>());
 
-                livox_laser.get_features(*livox_corners, *livox_surface, *livox_full, piece_wise_start[i], piece_wise_end[i]);
+                livox_laser.get_features(*livox_corners, *livox_surface, *livox_full, piece_wise_start[i], piece_wise_end[i]); // intensity = pt.time_stamp
                 ros::Time current_time = ros::Time::now();
 
                 pcl::toROSMsg(*livox_full, temp_out_msg);

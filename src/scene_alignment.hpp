@@ -28,7 +28,7 @@ public:
     pcl::VoxelGrid<PointType> down_sample_filter_surface;
     int pair_idx = 0;
     PointCloudRegistration pc_reg;
-    std::string m_save_path;
+    std::string save_path;
 
     SceneAlignment()
     {
@@ -191,10 +191,10 @@ public:
 
     void init(std::string path)
     {
-        m_save_path = path.append("/scene_align");
-        COMMON_TOOLS::create_dir(m_save_path);
-        file_logger_commond.set_log_dir(m_save_path);
-        file_logger_timer.set_log_dir(m_save_path);
+        save_path = path.append("/scene_align");
+        COMMON_TOOLS::create_dir(save_path);
+        file_logger_commond.set_log_dir(save_path);
+        file_logger_timer.set_log_dir(save_path);
         file_logger_commond.init("common.log");
         file_logger_timer.init("timer.log");
 
@@ -222,18 +222,18 @@ public:
                                       int if_save = 1,
                                       std::string mapping_save_path = std::string(" "))
     {
-        pcl::PointCloud<pcl_pt> source_pt_line = pt_cell_map_a->extract_specify_points(FeatureType::e_feature_line);
-        pcl::PointCloud<pcl_pt> source_pt_plane = pt_cell_map_a->extract_specify_points(FeatureType::e_feature_plane);
-        pcl::PointCloud<pcl_pt> all_pt_a = pt_cell_map_a->get_all_pointcloud();
+        pcl::PointCloud<PointType> source_pt_line = pt_cell_map_a->extract_specify_points(FeatureType::e_feature_line);
+        pcl::PointCloud<PointType> source_pt_plane = pt_cell_map_a->extract_specify_points(FeatureType::e_feature_plane);
+        pcl::PointCloud<PointType> all_pt_a = pt_cell_map_a->get_all_pointcloud();
 
         down_sample_filter_corner.setInputCloud(source_pt_line.makeShared());
         down_sample_filter_corner.filter(source_pt_line);
         down_sample_filter_surface.setInputCloud(source_pt_plane.makeShared());
         down_sample_filter_surface.filter(source_pt_plane);
 
-        pcl::PointCloud<pcl_pt> target_pt_line = pt_cell_map_b->extract_specify_points(FeatureType::e_feature_line);
-        pcl::PointCloud<pcl_pt> target_pt_plane = pt_cell_map_b->extract_specify_points(FeatureType::e_feature_plane);
-        pcl::PointCloud<pcl_pt> all_pt_b = pt_cell_map_b->get_all_pointcloud();
+        pcl::PointCloud<PointType> target_pt_line = pt_cell_map_b->extract_specify_points(FeatureType::e_feature_line);
+        pcl::PointCloud<PointType> target_pt_plane = pt_cell_map_b->extract_specify_points(FeatureType::e_feature_plane);
+        pcl::PointCloud<PointType> all_pt_b = pt_cell_map_b->get_all_pointcloud();
 
         down_sample_filter_corner.setInputCloud(target_pt_line.makeShared());
         down_sample_filter_corner.filter(target_pt_line);
@@ -248,7 +248,7 @@ public:
         pc_reg.q_w_last.setIdentity();
         pc_reg.t_w_last.setZero();
 
-        pc_reg.m_t_w_incre = transform_T;
+        pc_reg.t_w_incre = transform_T;
         pc_reg.t_w_curr = transform_T;
 
         pc_reg.find_out_incremental_transfrom(source_pt_line.makeShared(), source_pt_plane.makeShared(),
@@ -257,32 +257,32 @@ public:
         if (if_save)
         {
             PointCloudMap<PT_DATA_TYPE> temp_a, temp_b, temp_res;
-            auto eigen_pt_a = PCL_TOOLS::pcl_pts_to_eigen_pts<PT_DATA_TYPE, pcl_pt>(all_pt_a.makeShared());
+            auto eigen_pt_a = PCL_TOOLS::pcl_pts_to_eigen_pts<PT_DATA_TYPE, PointType>(all_pt_a.makeShared());
             down_sample_filter_surface.setInputCloud(all_pt_b.makeShared());
             down_sample_filter_surface.filter(all_pt_b);
             down_sample_filter_surface.setInputCloud(all_pt_a.makeShared());
             down_sample_filter_surface.filter(all_pt_a);
 
-            auto all_pt_temp = pointcloud_transfrom<double, pcl_pt>(all_pt_b, transform_R.toRotationMatrix(), transform_T);
+            auto all_pt_temp = pointcloud_transfrom<double, PointType>(all_pt_b, transform_R.toRotationMatrix(), transform_T);
 
-            temp_a.set_point_cloud(PCL_TOOLS::pcl_pts_to_eigen_pts<PT_DATA_TYPE, pcl_pt>(all_pt_a.makeShared()));
-            temp_b.set_point_cloud(PCL_TOOLS::pcl_pts_to_eigen_pts<PT_DATA_TYPE, pcl_pt>(all_pt_temp.makeShared()));
+            temp_a.set_point_cloud(PCL_TOOLS::pcl_pts_to_eigen_pts<PT_DATA_TYPE, PointType>(all_pt_a.makeShared()));
+            temp_b.set_point_cloud(PCL_TOOLS::pcl_pts_to_eigen_pts<PT_DATA_TYPE, PointType>(all_pt_temp.makeShared()));
 
-            all_pt_temp = pointcloud_transfrom<double, pcl_pt>(all_pt_b, pc_reg.q_w_curr.toRotationMatrix(), pc_reg.t_w_curr);
-            temp_res.set_point_cloud(PCL_TOOLS::pcl_pts_to_eigen_pts<PT_DATA_TYPE, pcl_pt>(all_pt_temp.makeShared()));
+            //all_pt_temp = pointcloud_transfrom<double, PointType>(all_pt_b, pc_reg.q_w_curr.toRotationMatrix(), pc_reg.t_w_curr);
+            //temp_res.set_point_cloud(PCL_TOOLS::pcl_pts_to_eigen_pts<PT_DATA_TYPE, PointType>(all_pt_temp.makeShared()));
 
             std::string save_path;
             if (mapping_save_path.compare(std::string(" ")) == 0)
-                save_path = m_save_path;
+                save_path = save_path;
             else
                 save_path = mapping_save_path;
 
             temp_a.save_to_file(save_path, std::to_string(pair_idx).append("_a.json"));
             temp_b.save_to_file(save_path, std::to_string(pair_idx).append("_b.json"));
-            temp_res.save_to_file(save_path, std::to_string(pair_idx).append("_c.json"));
+            temp_b.save_to_file(save_path, std::to_string(pair_idx).append("_c.json"));
             pair_idx++;
         }
-        return pc_reg.m_inlier_final_threshold;
+        return pc_reg.inlier_final_threshold;
     };
 };
 
