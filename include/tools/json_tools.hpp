@@ -3,7 +3,7 @@
 
 #include "rapidjson/rapidjson.h"
 
-namespace COMMON_TOOLS
+namespace Common_tools
 {
 template < typename T >
 T *get_json_array( const rapidjson::Document::Array &json_array )
@@ -15,6 +15,6 @@ T *get_json_array( const rapidjson::Document::Array &json_array )
     }
     return res_mat;
 };
-} // namespace COMMON_TOOLS
+} // namespace Common_tools
 
 #endif

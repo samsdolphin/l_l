@@ -14,7 +14,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #endif
-namespace COMMON_TOOLS
+namespace Common_tools
 {
     void create_dir(std::string dir)
     {

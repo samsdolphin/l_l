@@ -54,13 +54,13 @@ catkin_package(
 )
 
 
-add_executable(livox_scanRegistration src/laser_feature_extractor.cpp)
+add_executable(livox_scanRegistration source/laser_feature_extractor.cpp)
 target_link_libraries(livox_scanRegistration ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBS})
 
-add_executable(livox_laserMapping src/laser_mapping.cpp )
+add_executable(livox_laserMapping source/laser_mapping.cpp )
 target_link_libraries(livox_laserMapping ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${CERES_LIBRARIES} )
 
-add_executable(read_camera src/read_camera.cpp)
+add_executable(read_camera source/read_camera.cpp)
 target_link_libraries(read_camera ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${CERES_LIBRARIES} ${OpenCV_LIBS})
 
 

@@ -34,16 +34,14 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include "laser_mapping.hpp"
+#include "laser_feature_extractor.hpp"
 
 int main(int argc, char **argv)
 {
-    ros::init(argc, argv, "laserMapping");
-
-    LaserMapping laser_mapping;
-
-    std::thread mapping_process{&LaserMapping::process, &laser_mapping};
+    ros::init(argc, argv, "scanRegistration");
+    Laser_feature laser_feature;
 
     ros::spin();
+
     return 0;
 }

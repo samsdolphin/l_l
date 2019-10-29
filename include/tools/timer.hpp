@@ -7,7 +7,7 @@
 #include <string>
 #include <stdlib.h>
 #include <thread>
-namespace COMMON_TOOLS // Commond tools
+namespace Common_tools // Commond tools
 {
 
 static std::chrono::time_point< std::chrono::system_clock > timer_now()
@@ -91,7 +91,6 @@ class Timer
             it->second = timer_now();
         }
         return time_diff.count() * 1000;
-        ;
     }
 
     std::string toc_string( std::string str = std::string( " " ), int if_retick = 1 )
@@ -102,6 +101,6 @@ class Timer
     }
 };
 
-} // namespace COMMON_TOOLS
+} // namespace Common_tools
 
 #endif

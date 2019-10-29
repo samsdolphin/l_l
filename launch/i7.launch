@@ -36,7 +36,6 @@
     <param name="maximum_cell_life_time" type="double" value="500"/>
 
     <param name="if_motion_deblur" type="int" value="0"/>
-    <param name="if_loop_closure" type="int" value="1"/>
     <param name="odom_mode" type="int" value="1"/>          <!--0 = odom, 1 = mapping-->
     <param name="matching_mode" type="int" value="0"/>      <!--0 = history, 1 = cube-->
     <param name="input_downsample_mode" type="int" value="1"/>
@@ -50,13 +49,13 @@
     <param name="surround_pointcloud_resolution" type="double" value="0.4"/>
 
 
-    <node pkg="loam_livox" type="livox_scanRegistration" name="livox_scanRegistration" output="screen" >
-        <remap from="/laser_points" to="/livox/lidar" />
+    <node pkg="loam_livox" type="livox_scanRegistration" name="livox_scanRegistration" >
+     <remap from="/laser_points" to="/livox/lidar" />
     </node>
 
     <node pkg="loam_livox" type="livox_laserMapping" name="livox_laserMapping" output="screen" />
     <node pkg="loam_livox" type="read_camera" name="read_camera" output="screen" />
-    <node pkg="rosbag" type="play" name="rosbag" args="-r 1.0 /home/sam/Downloads/2.bag"/>
+    <!--<node pkg="rosbag" type="play" name="rosbag" args="-r 1.0 $(env HOME)/data/rosbag/HKU_04.bag"/>-->
     <!--HKU_04 HKU_IN_01 CYT_02 meixin_02-->
 
     <arg name="rviz" default="true" />
