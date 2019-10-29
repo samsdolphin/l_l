@@ -68,8 +68,6 @@ public:
 	pcl::KdTreeFLANN<PointType> m_kdtree_corner_from_map;
 	pcl::KdTreeFLANN<PointType> m_kdtree_surf_from_map;
 
-	Eigen::Matrix3d R_incre;
-	Eigen::Matrix<double ,3 , 1> T_incre;
 	Eigen::Quaterniond m_q_w_curr, m_q_w_last;
 	Eigen::Vector3d m_t_w_curr, m_t_w_last;
 
@@ -201,7 +199,7 @@ public:
 			std::vector<int> m_point_search_Idx;
 			std::vector<float> m_point_search_sq_dis;
 
-			FILE *fp = fopen(file_name.c_str(), "w+");
+			FILE *fp = fopen(file_name.c_str(), "a+");
 			if (fp == NULL)
 				cout << "Open file name " << file_name << " error, please check" << endl;
 			fprintf(fp, "%d\n", m_current_frame_index);
@@ -218,18 +216,21 @@ public:
 				corner_rejection_num = 0;
 				surface_rejecetion_num = 0;
 				Eigen::MatrixXd LE(1800, 6);
-				Eigen::MatrixXd b(1800, 1);
+				//Eigen::MatrixXd b(1800, 1);
 				Eigen::MatrixXd LE_(6, 6);
 				LE_.setZero();
 				Eigen::MatrixXd temp(3, 6);
-				Eigen::Matrix3d L;
-				Eigen::Matrix<double, 3, 6> E;
-				Eigen::Matrix3d R_opt;
-				Eigen::Matrix<double, 3, 1> T_opt;
-				R_opt = m_q_w_last.toRotationMatrix();
-				T_opt = m_t_w_last;
+				
+				//Eigen::Matrix<double, 3, 6> E;
+				//Eigen::Matrix3d R_opt;
+				//Eigen::Matrix<double, 3, 1> T_opt;
+				//R_opt = m_q_w_last.toRotationMatrix();
+				//T_opt = m_t_w_last;
 				int cons_num = 0;
-
+				Eigen::MatrixXd line(3, 500);
+				Eigen::MatrixXd pa(3, 500);
+				Eigen::MatrixXd pobs(3, 500);
+				
 				ceres::LossFunction *loss_function = new ceres::HuberLoss(0.1);
 				ceres::LocalParameterization *q_parameterization = new ceres::EigenQuaternionParameterization();
 				ceres::Problem::Options problem_options;
@@ -316,6 +317,7 @@ public:
 										m_t_w_last);
 
 								Eigen::Vector3d ab = pt_2 - pt_1;
+/*
 								L = Eigen::MatrixXd::Identity(3, 3) - ab * ab.transpose() / pow(ab.norm(), 2);
 								Eigen::Matrix3d skew_p;
 								skew_p << 0, curr_point(2), -curr_point(1),
@@ -327,8 +329,13 @@ public:
 								b.block(cons_num * 3, 0, 3, 1) << -L * (R_opt * curr_point + T_opt - pt_1);
 								temp << L * E;
 								LE.block(cons_num * 3, 0, 3, 6) << temp;
-								cons_num++;
+								
 								LE_ = LE_ + temp.transpose() * temp;
+*/
+								line.block(0, cons_num, 3, 1) = ab;
+								pa.block(0, cons_num, 3, 1) = pt_1;
+								pobs.block(0, cons_num, 3, 1) = curr_point;
+								cons_num++;
 
 								block_id = problem.AddResidualBlock(cost_function, loss_function, para_buffer_incremental, para_buffer_incremental + 4);
 								residual_block_ids.push_back(block_id);
@@ -412,6 +419,7 @@ public:
 								Eigen::Vector3d ab = pt_2 - pt_1;
 								Eigen::Vector3d ac = pt_3 - pt_1;
 								Eigen::Vector3d n = ab.cross(ac);
+/*
 								L = Eigen::MatrixXd::Identity(3, 3) - n * n.transpose() / pow(n.norm(), 2);
 								Eigen::Matrix3d skew_p;
 								skew_p << 0, curr_point(2), -curr_point(1),
@@ -419,12 +427,16 @@ public:
 											curr_point(1), -curr_point(0), 0;
 								E.block(0, 0, 3, 3) <<  R_opt * skew_p;
 								E.block(0, 3, 3, 3) << R_opt;
-
-								b.block(cons_num * 3, 0, 3, 1) << -L * (R_opt * curr_point + T_opt - pt_1);
+								//b.block(cons_num * 3, 0, 3, 1) << -L * (R_opt * curr_point + T_opt - pt_1);
 								temp << L * E;
 								LE.block(cons_num * 3, 0, 3, 6) << temp;
-								cons_num++;
+								
 								LE_ = LE_ + temp.transpose() * temp;
+*/
+								line.block(0, cons_num, 3, 1) = n;
+								pa.block(0, cons_num, 3, 1) = pt_1;
+								pobs.block(0, cons_num, 3, 1) = curr_point;
+								cons_num++;
 
 								block_id = problem.AddResidualBlock(cost_function, loss_function, para_buffer_incremental, para_buffer_incremental + 4);
 								residual_block_ids.push_back(block_id);
@@ -469,7 +481,11 @@ public:
 					{
 						problem.RemoveResidualBlock(residual_block_ids[i]);
 						LE.block(i * 3, 0, 3, 6).setZero();
-						b.block(i * 3, 0, 3, 1).setZero();
+						//b.block(i * 3, 0, 3, 1).setZero();
+						//line.block(0, i, 3, 1).setZero();
+						//pa.block(0, i, 3, 1).setZero();
+						//pobs.block(0, i, 3, 1).setZero();
+						//cons_num--;
 					}
 					else
 						residual_block_ids_bak.push_back(residual_block_ids[i]);
@@ -491,61 +507,89 @@ public:
 					m_interpolatation_omega_hat_sq2 = m_interpolatation_omega_hat * m_interpolatation_omega_hat;
 				}
 
-				LE.block(cons_num * 3, 0, 1800 - cons_num * 3, 6).setZero();
-				b.block(cons_num * 3, 0, 1800 - cons_num * 3, 1).setZero();
-				
-				Eigen::JacobiSVD<Eigen::MatrixXd> svd(LE, Eigen::ComputeThinU | Eigen::ComputeThinV);
-				Eigen::Matrix<double, 6, 1> svs;
-				svs << svd.singularValues();
-				for(int i=0;i<6;i++)
+				Eigen::MatrixXd A(3 * cons_num, 6);
+				Eigen::Matrix3d L;
+				Eigen::MatrixXd b(3 * cons_num, 1);
+				Eigen::Matrix<double, 3, 6> E;
+				Eigen::Vector3d l;
+				Eigen::Vector3d p_a;
+				Eigen::Vector3d p_o;
+				Eigen::Matrix3d skew_p;
+				Eigen::Matrix3d R_opt = m_q_w_last.toRotationMatrix();
+				Eigen::Vector3d T_opt = m_t_w_last;
+				double err = 0.0;
+				cout<<"# of constraints: "<<cons_num<<endl;
+				for (int iter = 0; iter < 10; iter++)
 				{
-					if(svs(i)>1e-3)
-						svs(i)=1/svs(i);
+					for (int i = 0; i < cons_num; i++)
+					{
+						l = line.block(0, i, 3, 1);
+						p_a = pa.block(0, i, 3, 1);
+						p_o = pobs.block(0, i, 3, 1);
+						L = Eigen::MatrixXd::Identity(3, 3) - l * l.transpose() / pow(l.norm(), 2);
+						skew_p << 0, p_o(2), -p_o(1),
+								-p_o(2), 0, p_o(0),
+								p_o(1), -p_o(0), 0;
+						E.block(0, 0, 3, 3) <<  R_opt * skew_p;
+						E.block(0, 3, 3, 3) << R_opt;
+						A.block(3 * i, 0, 3, 6) << L * E;
+						b.block(3 * i, 0, 3, 1) << -L * (R_opt * p_o + T_opt - p_a);
+					}
+					Eigen::Matrix<double, 6, 1> cur_x;
+					cur_x << R_opt(2, 1), R_opt(0, 2), R_opt(1, 0), T_opt(0), T_opt(1), T_opt(2);
+					cout<<"error_before: "<<(A*cur_x-b).norm()<<endl;
+					Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
+					Eigen::Matrix<double, 6, 1> svs;
+					svs << svd.singularValues();
+					for(int j = 0; j < 6; j++)
+					{
+						if(svs(j) > 1e-3)
+							svs(j) = 1 / svs(j);
+						else
+							svs(j) = 0;
+					}
+					Eigen::Matrix<double, 6, 1> abg;
+					//abg << LE.bdcSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(b);
+					abg << svd.matrixV() * svs.asDiagonal() * (svd.matrixU().transpose() * b).block(0, 0, 6, 1);
+					Eigen::Matrix3d R_incre;
+					Eigen::Matrix<double ,3 , 1> T_incre;
+					R_incre << 1, abg(0) * abg(1) - abg(2), abg(0) * abg(2) + abg(1),
+							   abg(2), abg(0) * abg(1) * abg(2) + 1, abg(1) * abg(2) - abg(0),
+							   -abg(1), abg(0), 1;
+					T_incre = abg.block(3, 0, 3, 1);
+					T_opt = R_opt * T_incre + T_opt;
+					R_opt = R_opt * R_incre;
+					cur_x << R_opt(2, 1), R_opt(0, 2), R_opt(1, 0), T_opt(0), T_opt(1), T_opt(2);
+					cout<<"error_after: "<<(A*cur_x-b).norm()<<endl;
+					if ((A*cur_x-b).norm()-err<0.01)
+						break;
 					else
-						svs(i)=0;
+						err = (A*cur_x-b).norm();
 				}
-				Eigen::Matrix<double, 6, 1> abg;
-				//abg << LE.bdcSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(b);
-				abg << svd.matrixV() * svs.asDiagonal() * (svd.matrixU().transpose() * b).block(0, 0, 6, 1);
-				R_incre << 1, abg(0) * abg(1) - abg(2), abg(0) * abg(2) + abg(1),
-							abg(2), abg(0) * abg(1) * abg(2) + 1, abg(1) * abg(2) - abg(0),
-							-abg(1), abg(0), 1;
-				T_incre = abg.block(3, 0, 3, 1);
-				Eigen::Quaterniond q(R_incre);
-				//double ratio = 1;
-				//Eigen::Quaterniond m_q_I = Eigen::Quaterniond(1, 0, 0, 0);
-				//Eigen::Quaterniond q1 = m_q_I.slerp(ratio, q);
-				//T_incre = T_incre * ratio;
-				T_opt = R_opt * T_incre + T_opt;
-				R_opt *= R_incre;
-				abg.block(0, 0, 3, 1) << R_opt(2, 1), R_opt(0, 2), R_opt(1, 0);
-				abg.block(3, 0, 3, 1) = T_opt;
-				/*
-				Eigen::SelfAdjointEigenSolver<Eigen::Matrix<double, 6, 6>> eigensolver;
-				eigensolver.compute(LE.transpose() * LE);
-				Eigen::Matrix<double, 6, 1> eval = eigensolver.eigenvalues();
-				Eigen::Matrix<double, 6, 6> evec = eigensolver.eigenvectors();
-				*/
-				//cout<<"eigenvalues: "<<eval.transpose()<<endl;
-				//fprintf(fp, "R_calculate: %f %f %f %f\n", q.w(), q.x(), q.y(), q.z());
-				//fprintf(fp, "T_calculate: %f %f %f\n", abg(3), abg(4), abg(5));
-
-				m_t_w_curr = m_q_w_last * m_t_w_incre + m_t_w_last;
-				m_q_w_curr = m_q_w_last * m_q_w_incre;
+				Eigen::Quaterniond q(R_opt);
+				fprintf(fp, "R_me: %f %f %f %f\n", q.w(), q.x(), q.y(), q.z());
+				fprintf(fp, "t_me: %f %f %f\n", T_opt(0), T_opt(1), T_opt(2));
+				fprintf(fp, "R_ceres: %f %f %f %f\n", m_q_w_incre.w(), m_q_w_incre.x(), m_q_w_incre.y(), m_q_w_incre.z());
+				fprintf(fp, "t_ceres: %f %f %f\n", m_t_w_incre(0), m_t_w_incre(1), m_t_w_incre(2));
+				
+				//m_t_w_curr = m_q_w_last * m_t_w_incre + m_t_w_last;
+				//m_q_w_curr = m_q_w_last * m_q_w_incre;
+				m_t_w_curr = T_opt;
+				m_q_w_curr = q;
 
 				angular_diff = (float) m_q_w_curr.angularDistance(m_q_w_last) * 57.3;
 				m_t_diff = (m_t_w_curr - m_t_w_last).norm();
 				minimize_cost = summary.final_cost;
 				
-				if (q_last_optimize.angularDistance(m_q_w_incre) < 57.3 * m_minimum_icp_R_diff && (t_last_optimize - m_t_w_incre).norm() < m_minimum_icp_T_diff)
+				if (q_last_optimize.angularDistance(q) < 57.3 * m_minimum_icp_R_diff && (t_last_optimize - T_opt).norm() < m_minimum_icp_T_diff)
 				{
 					screen_out << "----- Terminate, iteration time  = " << iterCount << "-----" << endl;
 					break;
 				}
 				else
 				{
-					q_last_optimize = m_q_w_incre;
-					t_last_optimize = m_t_w_incre;
+					q_last_optimize = q;
+					t_last_optimize = T_opt;
 				}
 			}
 			
