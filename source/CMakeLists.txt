@@ -14,14 +14,14 @@ execute_process(COMMAND ${_cmd}
   OUTPUT_STRIP_TRAILING_WHITESPACE
   ERROR_STRIP_TRAILING_WHITESPACE
 )
-if (NOT _res EQUAL 0 AND NOT _res EQUAL 2)
+if(NOT _res EQUAL 0 AND NOT _res EQUAL 2)
   # searching fot catkin resulted in an error
   string(REPLACE ";" " " _cmd_str "${_cmd}")
   message(FATAL_ERROR "Search for 'catkin' in workspace failed (${_cmd_str}): ${_err}")
-endif ()
+endif()
 
 # include catkin from workspace or via find_package()
-if (_res EQUAL 0)
+if(_res EQUAL 0)
   set(catkin_EXTRAS_DIR "${CMAKE_SOURCE_DIR}/${_out}/cmake")
   # include all.cmake without add_subdirectory to let it operate in same scope
   include(${catkin_EXTRAS_DIR}/all.cmake NO_POLICY_SCOPE)
@@ -30,21 +30,21 @@ if (_res EQUAL 0)
 else()
   # use either CMAKE_PREFIX_PATH explicitly passed to CMake as a command line argument
   # or CMAKE_PREFIX_PATH from the environment
-  if (NOT DEFINED CMAKE_PREFIX_PATH)
-    if (NOT "$ENV{CMAKE_PREFIX_PATH}" STREQUAL "")
+  if(NOT DEFINED CMAKE_PREFIX_PATH)
+    if(NOT "$ENV{CMAKE_PREFIX_PATH}" STREQUAL "")
       string(REPLACE ":" ";" CMAKE_PREFIX_PATH $ENV{CMAKE_PREFIX_PATH})
-    endif ()
-  endif ()
+    endif()
+  endif()
 
   # list of catkin workspaces
   set(catkin_search_path "")
   foreach(path ${CMAKE_PREFIX_PATH})
-    if (EXISTS "${path}/.catkin")
+    if(EXISTS "${path}/.catkin")
       list(FIND catkin_search_path ${path} _index)
-      if (_index EQUAL -1)
+      if(_index EQUAL -1)
         list(APPEND catkin_search_path ${path})
-      endif ()
-    endif ()
+      endif()
+    endif()
   endforeach()
 
   # search for catkin in all workspaces
@@ -55,9 +55,9 @@ else()
     NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
   unset(CATKIN_TOPLEVEL_FIND_PACKAGE)
 
-  if (NOT catkin_FOUND)
+  if(NOT catkin_FOUND)
     message(FATAL_ERROR "find_package(catkin) failed. catkin was neither found in the workspace nor in the CMAKE_PREFIX_PATH. One reason may be that no ROS setup.sh was sourced before.")
-  endif ()
-endif ()
+  endif()
+endif()
 
 catkin_workspace()

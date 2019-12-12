@@ -161,15 +161,15 @@ int save_PCLXYZI_to_txt( const std::string &filename, const pcl::PointCloud<pcl:
     }
 }
 
-class PCL_tools
+class PCL_point_cloud_to_pcd
 {
   public:
     string m_save_dir_name;
     string m_save_file_name;
     int    m_save_files_index;
 
-    ~PCL_tools(){};
-    PCL_tools()
+    ~PCL_point_cloud_to_pcd(){};
+    PCL_point_cloud_to_pcd()
     {
         m_save_dir_name = "";
         m_save_files_index = 0;

@@ -1,7 +1,7 @@
 // This is the Lidar Odometry And Mapping (LOAM) for solid-state lidar (for example: livox lidar),
 // which suffer form motion blur due the continously scan pattern and low range of fov.
 
-// Developer: Lin Jiarong  ziv.lin.ljr@gmail.com
+// Developer: Jiarong Lin  ziv.lin.ljr@gmail.com
 
 //   J. Zhang and S. Singh. LOAM: Lidar Odometry and Mapping in Real-time.
 //     Robotics: Science and Systems Conference (RSS). Berkeley, CA, July 2014.
@@ -36,9 +36,9 @@
 
 #include "laser_feature_extractor.hpp"
 
-int main(int argc, char **argv)
+int main( int argc, char **argv )
 {
-    ros::init(argc, argv, "scanRegistration");
+    ros::init( argc, argv, "scanRegistration" );
     Laser_feature laser_feature;
 
     ros::spin();

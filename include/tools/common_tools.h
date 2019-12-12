@@ -1,10 +1,18 @@
 #ifndef __COMMON_TOOLS_H__
 #define __COMMON_TOOLS_H__
 
-#include "logger.hpp"
-#include "timer.hpp"
-#include "os_compatible.hpp"
+#include <stdio.h>
+#include <stdlib.h>
 #include <future>
+#include <vector>
+#include <set>
+#include <list>
+#include <thread>
+#include "tools_logger.hpp"
+#include "tools_timer.hpp"
+#include "tools_random.hpp"
+#include "tools_json.hpp"
+#include "os_compatible.hpp"
 namespace Common_tools
 {
     template <typename T>
@@ -16,6 +24,28 @@ namespace Common_tools
             pt_vec.insert(pt_vec.end(), pt_vec_vec[i].begin(), pt_vec_vec[i].end());
         }
         return pt_vec;
+    };
+
+    template<typename T>
+    std::vector<T> std_set_to_vector (const std::set<T> & input_set)
+    {
+        std::vector<T> output_vector;
+        for(auto it = input_set.begin() ; it!= input_set.end(); it++)
+        {
+            output_vector.push_back(*(it));
+        }
+        return output_vector;
+    };
+
+    template<typename T>
+    std::set<T> std_vector_to_set (const std::vector<T> & input_vector)
+    {
+        std::set<T> output_set;
+        for(auto it = input_vector.begin() ; it!= input_vector.end(); it++)
+        {
+            output_set.insert(*(it));
+        }
+        return output_set;
     };
 
     template <typename T>

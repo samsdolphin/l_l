@@ -1,62 +1,34 @@
 <launch>
+    <rosparam command="load" file="$(find loam_livox)/config/performance_realtime.yaml" />
+    <param name="common/pcd_save_dir" type="string" value="$(env HOME)/Loam_livox_pts" />
+    <param name="common/log_save_dir" type="string" value="$(env HOME)/Loam_livox_temp" />
+    <param name="common/loop_save_dir" type="string" value="$(env HOME)/Loam_livox_temp" />
 
-    <param name="scan_line" type="int" value="16" />
-    <param name="lidar_type" type="string" value="livox" />
+    <!--If verbose the screen output-->
+    <param name="common/if_verbose_screen_printf" type="int" value="1"/>
 
-    <!-- if 1, do mapping 10 Hz, if 2, do mapping 5 Hz. Suggest to use 1, it will adjust frequence automaticlly -->
-    <param name="mapping_skip_frame" type="int" value="1" />
+    <param name="optimization/max_allow_incre_R" type="double" value="20"/>
+    <param name="optimization/max_allow_incre_T" type="double" value="1.0"/>
+    <param name="optimization/max_allow_final_cost" type="double" value="2.0"/>
 
-    <param name="minimum_range" type="double" value="1.0"/>
+    <param name="loop_closure/if_enable_loop_closure" type="int" value="0"/>
+    <param name="loop_closure/minimum_keyframe_differen" type="int" value="20"/>
 
-    <!--Debug save file option-->
-    <param name="if_save_to_pcd_files" type="int" value="0" />
-    <param name="pcd_save_dir" type="string" value="$(env HOME)/Loam_livox_pts" />
-    <param name="log_save_dir" type="string" value="$(env HOME)/Loam_livox_log" />
-    <param name="loop_save_dir" type="string" value="$(env HOME)/Loam_livox_pts" />
-    <!--Parameters for feature extraction-->
-    <param name="mapping_line_resolution" type="double" value="0.1"/>
-    <param name="mapping_plane_resolution" type="double" value="0.4"/>
-    <param name="livox_min_sigma" type="double" value="7e-4"/>
-    <param name="livox_min_dis" type="double" value="0.1"/>
-    <param name="corner_curvature" type="double" value="0.1"/>
-    <param name="surface_curvature" type="double" value="0.005"/>
-    <param name="minimum_view_angle" type="double" value="5"/>
-    <!--Parameters for optimization-->
-
-    <param name="maximum_parallel_thread" type="int" value="3"/>
-    <param name="max_allow_incre_R" type="double" value="20.0"/>
-    <param name="max_allow_incre_T" type="double" value="0.3"/>
-    <param name="max_allow_final_cost" type="double" value="1.0"/>
-    <param name="icp_maximum_iteration" type="int" value="5"/>
-    <param name="ceres_maximum_iteration" type="int" value="20"/>
-
-    <param name="minimum_icp_R_diff" type="double" value="0.05"/>
-    <param name="minimum_icp_T_diff" type="double" value="0.01"/>
-    <param name="maximum_pt_in_cell" type="int" value="1000000000"/>
-    <param name="maximum_cell_life_time" type="double" value="500"/>
-
-    <param name="if_motion_deblur" type="int" value="0"/>
-    <param name="odom_mode" type="int" value="1"/>          <!--0 = odom, 1 = mapping-->
-    <param name="matching_mode" type="int" value="0"/>      <!--0 = history, 1 = cube-->
-    <param name="input_downsample_mode" type="int" value="1"/>
-    <param name="maximum_mapping_buffer" type="int" value="10"/>
-    <param name="maximum_histroy_buffer" type="int" value="200"/>
-
-    <param name="maximum_in_fov_angle" type="double" value="45"/>
-    <param name="maximum_pointcloud_delay_time" type="double" value="10000000"/>
-    <param name="maximum_search_range_corner" type="double" value="100"/>
-    <param name="maximum_search_range_surface" type="double" value="100"/>
-    <param name="surround_pointcloud_resolution" type="double" value="0.4"/>
-
-
-    <node pkg="loam_livox" type="livox_scanRegistration" name="livox_scanRegistration" >
+    <node pkg="loam_livox" type="livox_scanRegistration" name="livox_scanRegistration" output="screen">
      <remap from="/laser_points" to="/livox/lidar" />
     </node>
 
     <node pkg="loam_livox" type="livox_laserMapping" name="livox_laserMapping" output="screen" />
-    <node pkg="loam_livox" type="read_camera" name="read_camera" output="screen" />
+
     <!--<node pkg="rosbag" type="play" name="rosbag" args="-r 1.0 $(env HOME)/data/rosbag/HKU_04.bag"/>-->
     <!--HKU_04 HKU_IN_01 CYT_02 meixin_02-->
+    <!--loop bag: HKUST_loop_02.bag  zym_loop_02 loop_simple-->
+    <!--<node pkg="rosbag" type="play" name="rosbag" args="-r 1.0 $(env HOME)/data/rosbag/zym_loop_02.bag"/>-->
+    <!--<node pkg="rosbag" type="play" name="rosbag" args="$(env HOME)/zym_loop_02.bag"/>-->
+    <!-- <node pkg="rosbag" type="play" name="rosbag" args="-r 1.0 /media/ziv/5164702D15F42F9C/bag_temp/2019-08-14-00-11-46.bag"/>-->
+
+    <node pkg="loam_livox" type="read_camera" name="read_camera" output="screen" />
+    <node pkg="rosbag" type="play" name="rosbag" args="-r 2.0 $(env HOME)/data/rosbag/zym_loop_02.bag"/>
 
     <arg name="rviz" default="true" />
     <group if="$(arg rviz)">
