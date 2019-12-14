@@ -1,4 +1,5 @@
 // Author: Jiarong Lin          ziv.lin.ljr@gmail.com
+// Modified: Xiyuan Liu         liuxiyuan95@gmail.com
 
 #ifndef POINT_CLOUD_REGISTRATION_HPP
 #define POINT_CLOUD_REGISTRATION_HPP
@@ -28,11 +29,12 @@
 
 #define CORNER_MIN_MAP_NUM 0
 #define SURFACE_MIN_MAP_NUM 50
-
 #define BLUR_SCALE 1.0
+#define USE_SIZED_COST 1
 
 using namespace PCL_TOOLS;
 using namespace Common_tools;
+
 //class Laser_mapping;
 int g_export_full_count = 0;
 class Point_cloud_registration
@@ -43,9 +45,9 @@ public:
     ceres::LinearSolverType slover_type = ceres::DENSE_SCHUR; // SPARSE_NORMAL_CHOLESKY | DENSE_QR | DENSE_SCHUR
 
     int line_search_num = 5;
-    int IF_LINE_FEATURE_CHECK = 0;
+    int IF_LINE_FEATURE_CHECK = 1;
     int plane_search_num = 5;
-    int IF_PLANE_FEATURE_CHECK = 0;
+    int IF_PLANE_FEATURE_CHECK = 1;
     int ICP_PLANE = 1;
     int ICP_LINE = 1;
     double m_para_buffer_RT[7] = { 0, 0, 0, 1, 0, 0, 0 };
@@ -58,10 +60,10 @@ public:
 
     int m_if_motion_deblur = 0 ;
 
-    double                  m_angular_diff = 0;
-    double                  m_t_diff = 0;
-    double                  m_maximum_dis_plane_for_match = 50.0;
-    double                  m_maximum_dis_line_for_match = 2.0;
+    double m_angular_diff = 0;
+    double m_t_diff = 0;
+    double m_maximum_dis_plane_for_match = 50.0;
+    double m_maximum_dis_line_for_match = 2.0;
     Eigen::Matrix<double, 3, 1> m_interpolatation_omega;
     Eigen::Matrix<double, 3, 3> m_interpolatation_omega_hat;
     Eigen::Matrix<double, 3, 3> m_interpolatation_omega_hat_sq2;
@@ -212,11 +214,10 @@ public:
                 corner_rejection_num = 0;
                 surface_rejecetion_num = 0;
 
-                //ceres::LossFunction *               loss_function = new ceres::HuberLoss(0.1);
-                //ceres::LocalParameterization *      q_parameterization = new ceres::EigenQuaternionParameterization();
-                ceres::Problem::Options             problem_options;
-                ceres::ResidualBlockId              block_id;
-                ceres::Problem                      problem(problem_options);
+                ceres::LossFunction* loss_function = new ceres::HuberLoss(0.1);
+                ceres::Problem::Options problem_options;
+                ceres::ResidualBlockId block_id;
+                ceres::Problem problem(problem_options);
                 std::vector<ceres::ResidualBlockId> residual_block_ids;
 
                 problem.AddParameterBlock(para_buff, 3);
@@ -289,15 +290,22 @@ public:
                                 auto pt_2 = pcl_pt_to_eigend(laser_cloud_corner_from_map.points[m_point_search_Idx[1]]);
                                 if ((pt_1 - pt_2).norm() < 0.0001)
                                     continue;
+                                if (USE_SIZED_COST)
+                                    cost_function = new Point2Line<double>(
+                                        curr_point,
+                                        pt_1,
+                                        pt_2,
+                                        Eigen::Matrix<double, 4, 1>(m_q_w_last.w(), m_q_w_last.x(), m_q_w_last.y(), m_q_w_last.z()),
+                                        m_t_w_last);
+                                else
+                                    cost_function = ceres_icp_point2line<double>::Create(
+                                        curr_point,
+                                        pt_1,
+                                        pt_2,
+                                        Eigen::Matrix<double, 4, 1>(m_q_w_last.w(), m_q_w_last.x(), m_q_w_last.y(), m_q_w_last.z()),
+                                        m_t_w_last);
 
-                                cost_function = ceres_icp_point2line<double>::Create(
-                                    curr_point,
-                                    pt_1,
-                                    pt_2,
-                                    Eigen::Matrix<double, 4, 1>(m_q_w_last.w(), m_q_w_last.x(), m_q_w_last.y(), m_q_w_last.z()),
-                                    m_t_w_last);
-                                
-                                block_id = problem.AddResidualBlock(cost_function, nullptr, para_buff, para_buff + 3);
+                                block_id = problem.AddResidualBlock(cost_function, loss_function, para_buff, para_buff + 3);
                                 residual_block_ids.push_back(block_id);
                                 corner_avail_num++;
                             }
@@ -359,15 +367,24 @@ public:
                             if (ICP_PLANE)
                             {
                                 ceres::CostFunction *cost_function;
-                                cost_function = ceres_icp_point2plane<double>::Create(
-                                    curr_point,
-                                    pcl_pt_to_eigend(laser_cloud_surf_from_map.points[m_point_search_Idx[0]]),
-                                    pcl_pt_to_eigend(laser_cloud_surf_from_map.points[m_point_search_Idx[plane_search_num / 2]]),
-                                    pcl_pt_to_eigend(laser_cloud_surf_from_map.points[m_point_search_Idx[plane_search_num - 1]]),
-                                    Eigen::Matrix<double, 4, 1>(m_q_w_last.w(), m_q_w_last.x(), m_q_w_last.y(), m_q_w_last.z()),
-                                    m_t_w_last);
-                                
-                                block_id = problem.AddResidualBlock(cost_function, nullptr, para_buff, para_buff + 3);
+                                if (USE_SIZED_COST)
+                                    cost_function = new Point2Plane<double>(
+                                        curr_point,
+                                        pcl_pt_to_eigend(laser_cloud_surf_from_map.points[m_point_search_Idx[0]]),
+                                        pcl_pt_to_eigend(laser_cloud_surf_from_map.points[m_point_search_Idx[plane_search_num / 2]]),
+                                        pcl_pt_to_eigend(laser_cloud_surf_from_map.points[m_point_search_Idx[plane_search_num - 1]]),
+                                        Eigen::Matrix<double, 4, 1>(m_q_w_last.w(), m_q_w_last.x(), m_q_w_last.y(), m_q_w_last.z()),
+                                        m_t_w_last);
+                                else
+                                    cost_function = ceres_icp_point2plane<double>::Create(
+                                        curr_point,
+                                        pcl_pt_to_eigend(laser_cloud_surf_from_map.points[m_point_search_Idx[0]]),
+                                        pcl_pt_to_eigend(laser_cloud_surf_from_map.points[m_point_search_Idx[plane_search_num / 2]]),
+                                        pcl_pt_to_eigend(laser_cloud_surf_from_map.points[m_point_search_Idx[plane_search_num - 1]]),
+                                        Eigen::Matrix<double, 4, 1>(m_q_w_last.w(), m_q_w_last.x(), m_q_w_last.y(), m_q_w_last.z()),
+                                        m_t_w_last);
+
+                                block_id = problem.AddResidualBlock(cost_function, loss_function, para_buff, para_buff + 3);
                                 residual_block_ids.push_back(block_id);
                                 surf_avail_num++;
                             }
@@ -380,7 +397,6 @@ public:
                 std::vector< ceres::ResidualBlockId > residual_block_ids_temp;
                 residual_block_ids_temp.reserve(residual_block_ids.size());
 
-                // Drop some of the residual to guaruntee the real time performance.
                 if (residual_block_ids.size() > (size_t) m_maximum_allow_residual_block)
                 {
                     residual_block_ids_temp.clear();
@@ -401,7 +417,6 @@ public:
 
                 ceres::Solver::Options options;
 
-                // If the number of residual block too Large, randomly drop some of them to guarentee the real-time perfromance.
                 for (size_t ii = 0; ii < 1; ii++)
                 {
                     options.linear_solver_type = slover_type;
@@ -441,8 +456,8 @@ public:
                 set_ceres_solver_bound(problem, para_buff);
                 ceres::Solve(options, &problem, &summary);
                 
-                cout<<"a_incre "<<a_incre.transpose()<<endl;
-                cout<<"t_incre "<<t_incre.transpose()<<endl;
+                //cout<<"a_incre "<<a_incre.transpose()<<endl;
+                //cout<<"t_incre "<<t_incre.transpose()<<endl;
                 
                 Eigen::Quaterniond q_incre(euler2rot(a_incre));
                 m_t_w_curr = m_q_w_last * t_incre + m_t_w_last;
