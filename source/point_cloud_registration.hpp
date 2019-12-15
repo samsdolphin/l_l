@@ -30,6 +30,7 @@
 #define CORNER_MIN_MAP_NUM 0
 #define SURFACE_MIN_MAP_NUM 50
 #define BLUR_SCALE 1.0
+#define USE_QUATERNION 0
 #define USE_SIZED_COST 1
 
 using namespace PCL_TOOLS;
@@ -52,9 +53,11 @@ public:
     int ICP_LINE = 1;
     double m_para_buffer_RT[7] = { 0, 0, 0, 1, 0, 0, 0 };
     double m_para_buffer_RT_last[7] = { 0, 0, 0, 1, 0, 0, 0 };
+    double buff_incre[7] = {0, 0, 0, 1, 0, 0, 0};
     double para_buff[6] = {0, 0, 0, 0, 0, 0};
 
-    Eigen::Map<Eigen::Vector3d> m_t_w_incre = Eigen::Map<Eigen::Vector3d>(para_buff + 3);
+    Eigen::Map<Eigen::Quaterniond> m_q_w_incre = Eigen::Map<Eigen::Quaterniond>(buff_incre);
+    Eigen::Map<Eigen::Vector3d> m_t_w_incre = Eigen::Map<Eigen::Vector3d>(buff_incre + 4);
 
     double m_interpolatation_theta;
 
@@ -145,8 +148,16 @@ public:
     {
         for (unsigned int i = 0; i < 3; i++)
         {
-            problem.SetParameterLowerBound(para_buffer_RT + 3, i, -m_para_max_speed);
-            problem.SetParameterUpperBound(para_buffer_RT + 3, i, +m_para_max_speed);
+            if (USE_QUATERNION)
+            {
+                problem.SetParameterLowerBound(para_buffer_RT + 4, i, -m_para_max_speed);
+                problem.SetParameterUpperBound(para_buffer_RT + 4, i, +m_para_max_speed);
+            }
+            else
+            {
+                problem.SetParameterLowerBound(para_buffer_RT + 3, i, -m_para_max_speed);
+                problem.SetParameterUpperBound(para_buffer_RT + 3, i, +m_para_max_speed);
+            }
         }
     };
 
@@ -166,6 +177,8 @@ public:
                                        pcl::PointCloud<PointType>::Ptr laserCloudCornerStack,
                                        pcl::PointCloud<PointType>::Ptr laserCloudSurfStack)
     {
+        Eigen::Map<Eigen::Quaterniond> q_w_incre = Eigen::Map<Eigen::Quaterniond>(buff_incre);
+        Eigen::Map<Eigen::Vector3d> t_w_incre = Eigen::Map<Eigen::Vector3d>(buff_incre + 4);
         Eigen::Map<Eigen::Vector3d> a_incre = Eigen::Map<Eigen::Vector3d>(para_buff);
         Eigen::Map<Eigen::Vector3d> t_incre = Eigen::Map<Eigen::Vector3d>(para_buff + 3);
 
@@ -215,13 +228,22 @@ public:
                 surface_rejecetion_num = 0;
 
                 ceres::LossFunction* loss_function = new ceres::HuberLoss(0.1);
+                ceres::LocalParameterization* q_parameterization = new ceres::EigenQuaternionParameterization();
                 ceres::Problem::Options problem_options;
                 ceres::ResidualBlockId block_id;
                 ceres::Problem problem(problem_options);
                 std::vector<ceres::ResidualBlockId> residual_block_ids;
 
-                problem.AddParameterBlock(para_buff, 3);
-                problem.AddParameterBlock(para_buff + 3, 3);
+                if (USE_QUATERNION)
+                {
+                    problem.AddParameterBlock(buff_incre, 4, q_parameterization);
+                    problem.AddParameterBlock(buff_incre + 4, 3);
+                }
+                else
+                {
+                    problem.AddParameterBlock(para_buff, 3);
+                    problem.AddParameterBlock(para_buff + 3, 3);
+                }
 
                 for (int i = 0; i < laser_corner_pt_num; i++)
                 {
@@ -290,22 +312,35 @@ public:
                                 auto pt_2 = pcl_pt_to_eigend(laser_cloud_corner_from_map.points[m_point_search_Idx[1]]);
                                 if ((pt_1 - pt_2).norm() < 0.0001)
                                     continue;
-                                if (USE_SIZED_COST)
-                                    cost_function = new Point2Line<double>(
-                                        curr_point,
-                                        pt_1,
-                                        pt_2,
-                                        Eigen::Matrix<double, 4, 1>(m_q_w_last.w(), m_q_w_last.x(), m_q_w_last.y(), m_q_w_last.z()),
-                                        m_t_w_last);
-                                else
+                                if (USE_QUATERNION)
+                                {
                                     cost_function = ceres_icp_point2line<double>::Create(
                                         curr_point,
                                         pt_1,
                                         pt_2,
                                         Eigen::Matrix<double, 4, 1>(m_q_w_last.w(), m_q_w_last.x(), m_q_w_last.y(), m_q_w_last.z()),
                                         m_t_w_last);
-
-                                block_id = problem.AddResidualBlock(cost_function, loss_function, para_buff, para_buff + 3);
+                                    block_id = problem.AddResidualBlock(cost_function, loss_function, buff_incre, buff_incre + 4);
+                                }
+                                else
+                                {
+                                    if (USE_SIZED_COST)
+                                        cost_function = new Point2Line<double>(
+                                            curr_point,
+                                            pt_1,
+                                            pt_2,
+                                            Eigen::Matrix<double, 4, 1>(m_q_w_last.w(), m_q_w_last.x(), m_q_w_last.y(), m_q_w_last.z()),
+                                            m_t_w_last);
+                                    else
+                                        cost_function = euler_point2line<double>::Create(
+                                            curr_point,
+                                            pt_1,
+                                            pt_2,
+                                            Eigen::Matrix<double, 4, 1>(m_q_w_last.w(), m_q_w_last.x(), m_q_w_last.y(), m_q_w_last.z()),
+                                            m_t_w_last);
+                                    block_id = problem.AddResidualBlock(cost_function, loss_function, para_buff, para_buff + 3);
+                                }
+                                
                                 residual_block_ids.push_back(block_id);
                                 corner_avail_num++;
                             }
@@ -329,7 +364,7 @@ public:
                     if (m_point_search_sq_dis[plane_search_num - 1] < m_maximum_dis_plane_for_match)
                     {
                         std::vector<Eigen::Vector3d> nearCorners;
-                        Eigen::Vector3d              center(0, 0, 0);
+                        Eigen::Vector3d center(0, 0, 0);
                         if (IF_PLANE_FEATURE_CHECK)
                         {
                             for (int j = 0; j < plane_search_num; j++)
@@ -367,24 +402,40 @@ public:
                             if (ICP_PLANE)
                             {
                                 ceres::CostFunction *cost_function;
-                                if (USE_SIZED_COST)
-                                    cost_function = new Point2Plane<double>(
-                                        curr_point,
-                                        pcl_pt_to_eigend(laser_cloud_surf_from_map.points[m_point_search_Idx[0]]),
-                                        pcl_pt_to_eigend(laser_cloud_surf_from_map.points[m_point_search_Idx[plane_search_num / 2]]),
-                                        pcl_pt_to_eigend(laser_cloud_surf_from_map.points[m_point_search_Idx[plane_search_num - 1]]),
-                                        Eigen::Matrix<double, 4, 1>(m_q_w_last.w(), m_q_w_last.x(), m_q_w_last.y(), m_q_w_last.z()),
-                                        m_t_w_last);
-                                else
+                                auto pt_1 = pcl_pt_to_eigend(laser_cloud_surf_from_map.points[m_point_search_Idx[0]]);
+                                auto pt_2 = pcl_pt_to_eigend(laser_cloud_surf_from_map.points[m_point_search_Idx[plane_search_num / 2]]);
+                                auto pt_3 = pcl_pt_to_eigend(laser_cloud_surf_from_map.points[m_point_search_Idx[plane_search_num - 1]]);
+                                if (USE_QUATERNION)
+                                {
                                     cost_function = ceres_icp_point2plane<double>::Create(
                                         curr_point,
-                                        pcl_pt_to_eigend(laser_cloud_surf_from_map.points[m_point_search_Idx[0]]),
-                                        pcl_pt_to_eigend(laser_cloud_surf_from_map.points[m_point_search_Idx[plane_search_num / 2]]),
-                                        pcl_pt_to_eigend(laser_cloud_surf_from_map.points[m_point_search_Idx[plane_search_num - 1]]),
+                                        pt_1,
+                                        pt_2,
+                                        pt_3,
                                         Eigen::Matrix<double, 4, 1>(m_q_w_last.w(), m_q_w_last.x(), m_q_w_last.y(), m_q_w_last.z()),
                                         m_t_w_last);
-
-                                block_id = problem.AddResidualBlock(cost_function, loss_function, para_buff, para_buff + 3);
+                                    block_id = problem.AddResidualBlock(cost_function, loss_function, buff_incre, buff_incre + 4);
+                                }
+                                else
+                                {
+                                    if (USE_SIZED_COST)
+                                        cost_function = new Point2Plane<double>(
+                                            curr_point,
+                                            pt_1,
+                                            pt_2,
+                                            pt_3,
+                                            Eigen::Matrix<double, 4, 1>(m_q_w_last.w(), m_q_w_last.x(), m_q_w_last.y(), m_q_w_last.z()),
+                                            m_t_w_last);
+                                    else
+                                        cost_function = euler_point2plane<double>::Create(
+                                            curr_point,
+                                            pt_1,
+                                            pt_2,
+                                            pt_3,
+                                            Eigen::Matrix<double, 4, 1>(m_q_w_last.w(), m_q_w_last.x(), m_q_w_last.y(), m_q_w_last.z()),
+                                            m_t_w_last);
+                                    block_id = problem.AddResidualBlock(cost_function, loss_function, para_buff, para_buff + 3);
+                                }
                                 residual_block_ids.push_back(block_id);
                                 surf_avail_num++;
                             }
@@ -425,8 +476,10 @@ public:
                     options.minimizer_progress_to_stdout = false;
                     options.check_gradients = false;
                     options.gradient_check_relative_precision = 1e-10;
-
-                    set_ceres_solver_bound(problem, para_buff);
+                    if (USE_QUATERNION)
+                        set_ceres_solver_bound(problem, buff_incre);
+                    else
+                        set_ceres_solver_bound(problem, para_buff);
                     ceres::Solve(options, &problem, &summary);
 
                     residual_block_ids_temp.clear();
@@ -452,31 +505,53 @@ public:
                 options.minimizer_progress_to_stdout = false;
                 options.check_gradients = false;
                 options.gradient_check_relative_precision = 1e-10;
-
-                set_ceres_solver_bound(problem, para_buff);
+                if (USE_QUATERNION)
+                        set_ceres_solver_bound(problem, buff_incre);
+                    else
+                        set_ceres_solver_bound(problem, para_buff);
                 ceres::Solve(options, &problem, &summary);
-                
-                //cout<<"a_incre "<<a_incre.transpose()<<endl;
-                //cout<<"t_incre "<<t_incre.transpose()<<endl;
-                
-                Eigen::Quaterniond q_incre(euler2rot(a_incre));
-                m_t_w_curr = m_q_w_last * t_incre + m_t_w_last;
-                m_q_w_curr = m_q_w_last * q_incre;
-
-                m_angular_diff = (float) m_q_w_curr.angularDistance(m_q_w_last) * 57.3;
-                m_t_diff = (m_t_w_curr - m_t_w_last).norm();
-                minimize_cost = summary.final_cost  ;
-
-                if (q_last_optimize.angularDistance(q_incre) < 57.3 * m_minimum_icp_R_diff &&
-                    (t_last_optimize - t_incre).norm() < m_minimum_icp_T_diff)
+                if (USE_QUATERNION)
                 {
-                    screen_out << "----- Terminate, iteration times  = " << iterCount << "-----" << endl;
-                    break;
+                    m_t_w_curr = m_q_w_last * t_w_incre + m_t_w_last;
+                    m_q_w_curr = m_q_w_last * q_w_incre;
+
+                    m_angular_diff = (float) m_q_w_curr.angularDistance(m_q_w_last) * 57.3;
+                    m_t_diff = (m_t_w_curr - m_t_w_last).norm();
+                    minimize_cost = summary.final_cost;
+
+                    if (q_last_optimize.angularDistance(q_w_incre) < 57.3 * m_minimum_icp_R_diff &&
+                        (t_last_optimize - t_w_incre).norm() < m_minimum_icp_T_diff)
+                    {
+                        screen_out << "----- Terminate, iteration times  = " << iterCount << "-----" << endl;
+                        break;
+                    }
+                    else
+                    {
+                        q_last_optimize = q_w_incre;
+                        t_last_optimize = t_w_incre;
+                    }
                 }
                 else
                 {
-                    q_last_optimize = q_incre;
-                    t_last_optimize = t_incre;
+                    Eigen::Quaterniond q_incre(euler2rot(a_incre));
+                    m_t_w_curr = m_q_w_last * t_incre + m_t_w_last;
+                    m_q_w_curr = m_q_w_last * q_incre;
+
+                    m_angular_diff = (float) m_q_w_curr.angularDistance(m_q_w_last) * 57.3;
+                    m_t_diff = (m_t_w_curr - m_t_w_last).norm();
+                    minimize_cost = summary.final_cost;
+
+                    if (q_last_optimize.angularDistance(q_incre) < 57.3 * m_minimum_icp_R_diff &&
+                        (t_last_optimize - t_incre).norm() < m_minimum_icp_T_diff)
+                    {
+                        screen_out << "----- Terminate, iteration times  = " << iterCount << "-----" << endl;
+                        break;
+                    }
+                    else
+                    {
+                        q_last_optimize = q_incre;
+                        t_last_optimize = t_incre;
+                    }
                 }
             }
 
@@ -566,19 +641,6 @@ public:
         Eigen::Vector3d point_w;
         if (m_if_motion_deblur == 0 || if_undistore == 0 || interpolate_s == 1.0)
             point_w = m_q_w_curr * point_curr + m_t_w_curr;
-        else
-        {
-            if (interpolate_s > 1.0 || interpolate_s < 0.0)
-                screen_printf("Input interpolate_s = %.5f\r\n", interpolate_s);
-            
-            //https://en.wikipedia.org/wiki/Rodrigues%27_rotation_formula
-            Eigen::Vector3d             interpolate_T = m_t_w_incre * (interpolate_s * BLUR_SCALE);
-            double                      interpolate_R_theta = m_interpolatation_theta * interpolate_s;
-            Eigen::Matrix<double, 3, 3> interpolate_R_mat;
-
-            interpolate_R_mat = Eigen::Matrix3d::Identity() + sin(interpolate_R_theta) * m_interpolatation_omega_hat + (1 - cos(interpolate_R_theta)) * m_interpolatation_omega_hat_sq2;
-            point_w = m_q_w_last * (interpolate_R_mat * point_curr + interpolate_T) + m_t_w_last;
-        }
 
         po->x = point_w.x();
         po->y = point_w.y();
