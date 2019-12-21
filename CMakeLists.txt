@@ -22,6 +22,7 @@ find_package(catkin REQUIRED COMPONENTS
 find_package(Eigen3 REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(Ceres REQUIRED)
+find_package(Sophus REQUIRED)
 
 #### Specify PCL version
 if(NOT DEFINED ENV{PCL_ROOT})
@@ -44,6 +45,7 @@ include_directories(
   ${PCL_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
   ${CERES_INCLUDE_DIRS}
+  ${Sophus_INCLUDE_DIRS}
   ./include/tools/
   )
 
@@ -57,8 +59,8 @@ catkin_package(
 add_executable(livox_scanRegistration source/laser_feature_extractor.cpp)
 target_link_libraries(livox_scanRegistration ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBS})
 
-add_executable(livox_laserMapping source/laser_mapping.cpp )
-target_link_libraries(livox_laserMapping ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${CERES_LIBRARIES} )
+add_executable(livox_laserMapping source/laser_mapping.cpp)
+target_link_libraries(livox_laserMapping ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${CERES_LIBRARIES} ${Sophus_LIBRARIES})
 
 add_executable(read_camera source/read_camera.cpp)
 target_link_libraries(read_camera ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${CERES_LIBRARIES} ${OpenCV_LIBS})
