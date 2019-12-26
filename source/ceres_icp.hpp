@@ -345,9 +345,9 @@ bool LineParameterization::Plus(const double* x,
                                 double* x_plus_delta) const
 {
     Eigen::Map<const Eigen::Vector3d> so3_x(x);
-    Sophus::SO3<double> SO3_x = Sophus::SO3<double>::exp(so3_x);
+    //Sophus::SO3<double> SO3_x = Sophus::SO3<double>::exp(so3_x);
     Eigen::Map<const Eigen::Vector3d> so3_delta(delta);
-    Sophus::SO3<double> SO3_delta = Sophus::SO3<double>::exp(so3_delta);
+    //Sophus::SO3<double> SO3_delta = Sophus::SO3<double>::exp(so3_delta);
     Eigen::Map<Eigen::Vector3d> angles_plus(x_plus_delta);
     //angles_plus = (SO3_x * SO3_delta).log();
     angles_plus = so3_x + so3_delta;
