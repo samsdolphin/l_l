@@ -23,7 +23,7 @@ optimization:
     maximum_residual_blocks: 200
     max_allow_final_cost: 2.0
     icp_maximum_iteration: 15
-    ceres_maximum_iteration: 50
+    ceres_maximum_iteration: 100
 
 mapping:
     matching_mode: 0            # 0 = history, 1 = cube
@@ -38,7 +38,7 @@ mapping:
     surround_pointcloud_resolution: 0.30
     max_allow_incre_R: 20
     max_allow_incre_T: 0.3
-    max_allow_final_cost: 2.0
+    max_allow_final_cost: 3.0
 
 loop_closure:
     if_enable_loop_closure: 0
