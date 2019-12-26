@@ -21,6 +21,7 @@
 
 #include "ceres_icp.hpp"
 #include "common.h"
+#include <opencv/cv.h>
 #include <sophus/se3.hpp>
 #include "tools_logger.hpp"
 #include "pcl_tools.hpp"
@@ -32,6 +33,7 @@
 #define SURFACE_MIN_MAP_NUM 50
 #define BLUR_SCALE 1.0
 #define USE_SIZED_COST 1
+#define USE_SELF_LM 1
 
 using namespace PCL_TOOLS;
 using namespace Common_tools;
@@ -42,6 +44,8 @@ class Point_cloud_registration
 {
 public:
 
+    std::string path_name = "/home/sam/Loam_livox";
+	std::string file_name = std::string(path_name).append("/test");
     //ceres::LinearSolverType slover_type = ceres::SPARSE_NORMAL_CHOLESKY; 
     ceres::LinearSolverType slover_type = ceres::DENSE_SCHUR; // SPARSE_NORMAL_CHOLESKY | DENSE_QR | DENSE_SCHUR
 
@@ -89,7 +93,7 @@ public:
     float  m_last_time_stamp = 0;
     float  m_para_max_angular_rate = 200.0 / 50.0; // max angular rate = 90.0 /50.0 deg/s
     float  m_para_max_speed = 100.0 / 50.0;        // max speed = 10 m/s
-    float  m_max_final_cost = 100.0;
+    float  m_max_final_cost = 3.0;
     int    m_para_icp_max_iterations = 20;
     int    m_para_cere_max_iterations = 100;
     int    m_para_cere_prerun_times = 2;
@@ -209,8 +213,13 @@ public:
             laserCloudSurfFromMapNum > SURFACE_MIN_MAP_NUM &&
             m_current_frame_index > m_mapping_init_accumulate_frames)
         {
+            FILE *fp = fopen(file_name.c_str(), "a+");
+			if (fp == NULL)
+				cout << "Open file name " << file_name << " error, please check" << endl;
+
             m_timer->tic("Build kdtree");
             cout<<"FRAME INDEX "<<m_current_frame_index<<endl;
+
             *(m_logger_timer->get_ostream()) << m_timer->toc_string("Build kdtree") << std::endl;
             Eigen::Quaterniond q_last_optimize(1.f, 0.f, 0.f, 0.f);
             Eigen::Vector3d    t_last_optimize(0.f, 0.f, 0.f);
@@ -227,6 +236,10 @@ public:
                 surf_avail_num = 0;
                 corner_rejection_num = 0;
                 surface_rejecetion_num = 0;
+
+                std::vector<Eigen::Vector3d> line, plane, curPt, tarA;
+                std::vector<Eigen::Vector3d> line_, plane_, curPt_, tarA_;
+                bool remove_ = false;
 
                 ceres::LossFunction* loss_function = new ceres::HuberLoss(0.1);
                 ceres::LocalParameterization* q_parameterization = new ceres::EigenQuaternionParameterization();
@@ -334,7 +347,9 @@ public:
                                         m_t_w_last);
                                     block_id = problem.AddResidualBlock(cost_function, loss_function, buff_incre, buff_incre + 4);
                                 }
-                                
+                                line.push_back(pt_2 - pt_1);
+                                curPt.push_back(curr_point);
+                                tarA.push_back(pt_1);
                                 residual_block_ids.push_back(block_id);
                                 corner_avail_num++;
                             }
@@ -352,7 +367,10 @@ public:
 
                     pointOri = laserCloudSurfStack->points[i];
                     int planeValid = true;
-                    pointAssociateToMap(&pointOri, &pointSel, refine_blur(pointOri.intensity, m_minimum_pt_time_stamp, m_maximum_pt_time_stamp), if_undistore_in_matching);
+                    pointAssociateToMap(&pointOri,
+                                        &pointSel,
+                                        refine_blur(pointOri.intensity, m_minimum_pt_time_stamp, m_maximum_pt_time_stamp),
+                                        if_undistore_in_matching);
                     m_kdtree_surf_from_map.nearestKSearch(pointSel, plane_search_num, m_point_search_Idx, m_point_search_sq_dis);
 
                     if (m_point_search_sq_dis[plane_search_num - 1] < m_maximum_dis_plane_for_match)
@@ -422,7 +440,9 @@ public:
                                         m_t_w_last);
                                     block_id = problem.AddResidualBlock(cost_function, loss_function, buff_incre, buff_incre + 4);
                                 }
-                                
+                                plane.push_back((pt_3 - pt_1).cross(pt_2 - pt_1));
+                                curPt.push_back(curr_point);
+                                tarA.push_back(pt_1);
                                 residual_block_ids.push_back(block_id);
                                 surf_avail_num++;
                             }
@@ -437,6 +457,7 @@ public:
 
                 if (residual_block_ids.size() > (size_t) m_maximum_allow_residual_block)
                 {
+                    remove_ = true;
                     residual_block_ids_temp.clear();
 
                     float threshold_to_reserve = (float) m_maximum_allow_residual_block / (float) residual_block_ids.size();
@@ -447,12 +468,43 @@ public:
                         if (probability_to_drop[i] > threshold_to_reserve)
                             problem.RemoveResidualBlock(residual_block_ids[i]);
                         else
+                        {
                             residual_block_ids_temp.push_back(residual_block_ids[i]);
+                            curPt_.push_back(curPt[i]);
+                            tarA_.push_back(tarA[i]);
+                            if (i < line.size())
+                                line_.push_back(line[i]);
+                            else
+                                plane_.push_back(plane[i - line.size()]);
+                        }
                     }
                     residual_block_ids = residual_block_ids_temp;
                     delete probability_to_drop;
                 }
-
+                if (remove_)
+                {
+                    assert(residual_block_ids.size()==tarA_.size());
+                    assert(curPt_.size()==line_.size()+plane_.size());
+                    line.clear();
+                    plane.clear();
+                    tarA.clear();
+                    curPt.clear();
+                    for (size_t i = 0; i < tarA_.size(); i++)
+                    {
+                        tarA.push_back(tarA_[i]);
+                        curPt.push_back(curPt_[i]);
+                        if (i < line_.size())
+                            line.push_back(line_[i]);
+                        else
+                            plane.push_back(plane_[i - line_.size()]);
+                    }
+                    line_.clear();
+                    plane_.clear();
+                    tarA_.clear();
+                    curPt_.clear();
+                    remove_ = false;
+                }
+                
                 ceres::Solver::Options options;
 
                 for (size_t ii = 0; ii < 1; ii++)
@@ -467,8 +519,8 @@ public:
                         set_ceres_solver_bound(problem, para_buff);
                     else
                         set_ceres_solver_bound(problem, buff_incre);
-                    ceres::Solve(options, &problem, &summary);
 
+                    ceres::Solve(options, &problem, &summary);
                     residual_block_ids_temp.clear();
                     ceres::Problem::EvaluateOptions eval_options;
                     eval_options.residual_blocks = residual_block_ids;
@@ -478,15 +530,42 @@ public:
 
                     double m_inliner_ratio_threshold = compute_inlier_residual_threshold(residuals, m_inlier_ratio);
                     m_inlier_threshold = std::max(m_inliner_dis, m_inliner_ratio_threshold);
+                    assert(residual_block_ids.size()==tarA.size());
                     for (unsigned int i = 0; i < residual_block_ids.size(); i++)
                     {
                         if ((fabs(residuals[3 * i + 0]) + fabs(residuals[3 * i + 1]) + fabs(residuals[3 * i + 2])) > m_inlier_threshold) // std::min(1.0, 10 * avr_cost)
                             problem.RemoveResidualBlock(residual_block_ids[i]);
                         else
+                        {
                             residual_block_ids_temp.push_back(residual_block_ids[i]);
+                            curPt_.push_back(curPt[i]);
+                            tarA_.push_back(tarA[i]);
+                            if (i < line.size())
+                                line_.push_back(line[i]);
+                            else
+                                plane_.push_back(plane[i - line.size()]);
+                        }
                     }
                     residual_block_ids = residual_block_ids_temp;
                 }
+                line.clear();
+                plane.clear();
+                tarA.clear();
+                curPt.clear();
+                for (size_t i = 0; i < tarA_.size(); i++)
+                {
+                    tarA.push_back(tarA_[i]);
+                    curPt.push_back(curPt_[i]);
+                    if (i < line_.size())
+                        line.push_back(line_[i]);
+                    else
+                        plane.push_back(plane_[i - line_.size()]);
+                }
+                line_.clear();
+                plane_.clear();
+                tarA_.clear();
+                curPt_.clear();
+                
                 options.linear_solver_type = slover_type;
                 options.max_num_iterations = m_para_cere_max_iterations;
                 options.minimizer_progress_to_stdout = false;
@@ -497,10 +576,132 @@ public:
                     set_ceres_solver_bound(problem, para_buff);
                 else
                     set_ceres_solver_bound(problem, buff_incre);
-                
                 ceres::Solve(options, &problem, &summary);
 
-                if (USE_SIZED_COST)
+                double para_incre[6] = {0, 0, 0, 0, 0, 0};
+                Eigen::Map<Eigen::Vector3d> a_inc = Eigen::Map<Eigen::Vector3d>(para_incre);
+                Eigen::Map<Eigen::Vector3d> t_inc = Eigen::Map<Eigen::Vector3d>(para_incre + 3);
+                double cost_aft = 0.0;
+                double cost_ori = 0.0;
+                
+                if (USE_SELF_LM)
+                {
+                    double lambda = 1;
+                    double rho = 1;
+
+                    for (int it = 0; it < 20; it++)
+                    {
+                        size_t num = tarA.size();
+                        Eigen::MatrixXd J(num, 6);
+                        Eigen::MatrixXd f0(num, 1);
+                        J.setZero();
+                        f0.setZero();
+                        Eigen::Matrix3d L;
+
+                        for (size_t i = 0; i < num; i++)
+                        {
+                            if (i < line.size())
+                            {
+                                Eigen::Vector3d l = line[i];
+                                L = Eigen::MatrixXd::Identity(3, 3) - l * l.transpose() / pow(l.norm(), 2);
+                            }
+                            else
+                            {
+                                Eigen::Vector3d l = plane[i - line.size()];
+                                L = l * l.transpose() / pow(l.norm(), 2);
+                            }
+                            Eigen::Vector3d cur_pt = curPt[i];
+                            Eigen::Vector3d pa = tarA[i];
+                            Eigen::Quaterniond q_inc = toQuaterniond(a_inc);
+                            Eigen::Vector3d temp = L * (m_q_w_last * (q_inc * cur_pt + t_inc) + m_t_w_last - pa);
+                            Eigen::Matrix<double, 1, 3> sig = sign(temp);
+                            f0(i, 0) = sig * temp;
+                            Eigen::Matrix3d R = -L * m_q_w_last * hat(q_inc * cur_pt) * A(a_inc);
+                            for (int j = 0; j < 3; j++)
+                                J(i, j) = sig * R.col(j);
+
+                            Eigen::Vector3d p_x{1.0, 0.0, 0.0};
+                            Eigen::Vector3d p_y{0.0, 1.0, 0.0};
+                            Eigen::Vector3d p_z{0.0, 0.0, 1.0};
+                            J(i, 3) = sig * (L * m_q_w_last * p_x);
+                            J(i, 4) = sig * (L * m_q_w_last * p_y);
+                            J(i, 5) = sig * (L * m_q_w_last * p_z);
+                        }
+
+                        Eigen::MatrixXd H(6, 6);
+                        H = J.transpose() * J;
+                        Eigen::MatrixXd JTf(6, 1);
+                        JTf = -J.transpose() * f0;
+                        Eigen::MatrixXd DD = Eigen::MatrixXd::Identity(6, 6);
+                        for (int i = 0; i < 6; i++)
+                            DD(i, i) = H(i, i);
+                        H += lambda * DD;
+                        cv::Mat matA0(6, 6, CV_64F, cv::Scalar::all(0));
+                        cv::Mat matB0(6, 1, CV_64F, cv::Scalar::all(0));
+                        cv::Mat matX0(6, 1, CV_64F, cv::Scalar::all(0));
+
+                        for (int i = 0; i < 6; i++)
+                        {
+                            matB0.at<double>(i, 0) = JTf(i, 0);
+                            for (int j = 0; j < 6; j++)
+                                matA0.at<double>(i, j) = H(i, j);
+                        }
+                        cv::solve(matA0, matB0, matX0, cv::DECOMP_QR);
+                        
+                        Eigen::Vector3d t_temp, a_temp;
+                        Eigen::Matrix<double, 6, 1> delta_x;
+                        for (int i = 0; i < 3; i++)
+                        {
+                            a_temp(i) = matX0.at<double>(i, 0);
+                            t_temp(i) = matX0.at<double>(i + 3, 0);
+                            delta_x(i) = matX0.at<double>(i, 0);
+                            delta_x(i + 3) = matX0.at<double>(i + 3, 0);
+                        }
+                        
+                        cost_ori = cost_func(line, plane, tarA, curPt, m_q_w_last * toQuaterniond(a_inc), m_q_w_last * t_inc + m_t_w_last);
+                        cost_aft = cost_func(line, plane, tarA, curPt, m_q_w_last * toQuaterniond(a_inc + a_temp), m_q_w_last * (t_inc + t_temp) + m_t_w_last);
+                        rho = (cost_ori - cost_aft) / pow((J * delta_x).norm(), 2);
+                        //std::cout<<"rho: "<<rho<<", lambda: "<<lambda<<std::endl;
+                        if (rho > 0.5)
+                        {
+                            //std::cout<<"cost before: "<<cost_ori<<", cost after: "<<cost_aft<<std::endl;
+                            a_inc += a_temp;
+                            t_inc += t_temp;
+                        }
+                        if (rho > 0.75)
+                            lambda *= max(1.0 / 3, 1 - pow(2 * rho - 1 ,3));
+                        if (rho < 0.25)
+                            lambda *= 2;
+                        if (lambda > 1e6 || lambda < 1e-6)
+                            break;
+                    }
+                }
+
+                if (USE_SELF_LM)
+                {
+                    Eigen::Quaterniond q_inc = toQuaterniond(a_inc);
+                    m_t_w_curr = m_q_w_last * t_inc + m_t_w_last;
+                    m_q_w_curr = m_q_w_last * q_inc;
+
+                    m_angular_diff = (float) m_q_w_curr.angularDistance(m_q_w_last) * 57.3;
+                    m_t_diff = (m_t_w_curr - m_t_w_last).norm();
+                    minimize_cost = cost_ori / tarA.size();
+                    std::cout<<"cost: "<<minimize_cost<<std::endl;
+
+                    if (q_last_optimize.angularDistance(q_inc) < 57.3 * m_minimum_icp_R_diff &&
+                        (t_last_optimize - t_inc).norm() < m_minimum_icp_T_diff)
+                    {
+                        ROS_INFO_ONCE("USE_SELF_LM");
+                        screen_out << "----- Terminate, iteration times  = " << iterCount << "-----" << endl;
+                        break;
+                    }
+                    else
+                    {
+                        q_last_optimize = q_inc;
+                        t_last_optimize = t_inc;
+                    }
+                }
+                else if (USE_SIZED_COST)
                 {
                     Eigen::Quaterniond q_incre = toQuaterniond(a_incre);
                     m_t_w_curr = m_q_w_last * t_incre + m_t_w_last;
@@ -544,7 +745,7 @@ public:
                     }
                 }
             }
-
+            fclose(fp);
             screen_printf("===== corner factor num %d , surf factor num %d=====\n", corner_avail_num, surf_avail_num);
             if (laser_corner_pt_num != 0 && laser_surface_pt_num != 0)
             {
