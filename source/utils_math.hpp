@@ -93,7 +93,7 @@ inline Eigen::Quaterniond toQuaterniond(const Eigen::Vector3d& v3d, double* angl
     {
         double theta_sq = theta * theta;
         double theta_po4 = theta_sq * theta_sq;
-        imag_factor = 0.5-0.0208333 * theta_sq + 0.000260417 * theta_po4;
+        imag_factor = 0.5 - 0.0208333 * theta_sq + 0.000260417 * theta_po4;
     }
     else
     {
@@ -102,6 +102,38 @@ inline Eigen::Quaterniond toQuaterniond(const Eigen::Vector3d& v3d, double* angl
     }
 
     return Eigen::Quaterniond(real_factor, imag_factor * v3d.x(), imag_factor * v3d.y(), imag_factor * v3d.z());
+}
+
+double cost_func(std::vector<Eigen::Vector3d> line,
+                 std::vector<Eigen::Vector3d> plane,
+                 std::vector<Eigen::Vector3d> tarA,
+                 std::vector<Eigen::Vector3d> curPt,
+                 Eigen::Quaterniond q_last,
+                 Eigen::Vector3d p_last)
+{
+    Eigen::Vector3d l;
+    Eigen::Matrix3d L;
+    size_t num = tarA.size();
+    double cost = 0.0;
+    for (size_t i = 0; i < num; i++)
+    {
+        if (i < line.size())
+        {
+            l = line[i];
+            L = Eigen::MatrixXd::Identity(3, 3) - l * l.transpose() / pow(l.norm(), 2);
+        }   
+        else
+        {
+            l = plane[i - line.size()];
+            L = l * l.transpose() / pow(l.norm(), 2);
+        }
+        Eigen::Vector3d cur_pt = curPt[i];
+        Eigen::Vector3d pa = tarA[i];
+        Eigen::Vector3d temp = L * (q_last * cur_pt + p_last - pa);
+        Eigen::Matrix<double, 1, 3> sig = sign(temp);
+        cost += pow(sig * temp, 2);
+    }
+    return cost;
 }
 
 #endif // UTILS_MATH_HPP
