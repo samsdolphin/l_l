@@ -146,7 +146,7 @@ class Laser_mapping
     int    m_matching_mode = 0;
     int    m_if_input_downsample_mode = 1;
     int    m_maximum_parallel_thread;
-    int    m_maximum_mapping_buff_thread = 1; // Maximum number of thead for matching buffer update
+    int    m_maximum_mapping_buff_thread = 0; // Maximum number of thead for matching buffer update
     int    m_maximum_history_size = 100;
     int    m_para_threshold_cell_revisit = 0;
     float  m_para_max_angular_rate = 200.0 / 50.0; // max angular rate = 90.0 /50.0 deg/s
@@ -1321,7 +1321,7 @@ class Laser_mapping
         pcl::VoxelGrid<PointType>   down_sample_filter_surface = m_down_sample_filter_surface;
         pcl::KdTreeFLANN<PointType> kdtree_corner_from_map;
         pcl::KdTreeFLANN<PointType> kdtree_surf_from_map;
-
+        update_buff_for_matching();
         m_mutex_querypointcloud.lock();
         current_laser_cloud_full = *m_laser_cloud_full_res;
         current_laser_cloud_corner_last = *m_laser_cloud_corner_last;
