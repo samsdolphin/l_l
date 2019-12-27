@@ -20,7 +20,7 @@ feature_extraction:
 optimization:
     minimum_icp_R_diff: 0.01
     minimum_icp_T_diff: 0.01
-    maximum_residual_blocks: 200
+    maximum_residual_blocks: 200000
     max_allow_final_cost: 2.0
     icp_maximum_iteration: 15
     ceres_maximum_iteration: 100
