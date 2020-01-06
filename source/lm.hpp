@@ -17,7 +17,7 @@ public:
 public:
     Eigen::Quaterniond q_last;
     Eigen::Vector3d t_last, a_inc, t_inc;
-    double lambda, rho, cost_ori, cost_aft;
+    double lambda, rho, thr, cost_ori, cost_aft;
     std::vector<Eigen::Vector3d> line_, plane_, tarA_, curPt_;
 };
 
@@ -30,6 +30,7 @@ LM::LM(std::vector<Eigen::Vector3d> line,
     t_inc << 0, 0, 0;
     lambda = 1;
     rho = 1;
+    thr = 10;
 }
 
 bool LM::solve()
@@ -81,27 +82,62 @@ bool LM::solve()
         for (int i = 0; i < 6; i++)
             DD(i, i) = H(i, i);
         H += lambda * DD;
-        cv::Mat matA0(6, 6, CV_64F, cv::Scalar::all(0));
-        cv::Mat matB0(6, 1, CV_64F, cv::Scalar::all(0));
-        cv::Mat matX0(6, 1, CV_64F, cv::Scalar::all(0));
+        cv::Mat matA(6, 6, CV_64F, cv::Scalar::all(0));
+        cv::Mat matB(6, 1, CV_64F, cv::Scalar::all(0));
+        cv::Mat matX(6, 1, CV_64F, cv::Scalar::all(0));
 
         for (int i = 0; i < 6; i++)
         {
-            matB0.at<double>(i, 0) = JTf(i, 0);
+            matB.at<double>(i, 0) = JTf(i, 0);
             for (int j = 0; j < 6; j++)
-                matA0.at<double>(i, j) = H(i, j);
+                matA.at<double>(i, j) = H(i, j);
         }
-        cv::solve(matA0, matB0, matX0, cv::DECOMP_QR);
+        cv::solve(matA, matB, matX, cv::DECOMP_QR);
+
+        Eigen::SelfAdjointEigenSolver<Eigen::Matrix<double, 6, 6>> eigensolver;
+        eigensolver.compute(H);
+        Eigen::Matrix<double, 6, 1> eig_vals = eigensolver.eigenvalues();
+        Eigen::Matrix<double, 6, 6> eig_vecs = eigensolver.eigenvectors();
+        Eigen::Matrix<double, 6, 6> Vf = eig_vecs;
+        Eigen::Matrix<double, 6, 6> Vp = Eigen::MatrixXd::Zero(6, 6);
+        Eigen::Matrix<double, 6, 6> Vu = Eigen::MatrixXd::Zero(6, 6);
+        int direction = -1;
+
+        for (int i = 0; i < 6; i++)
+        {
+            if (eig_vals(i) < thr)
+            {
+                Vp.col(i) = eig_vecs.col(i);
+                if (i == 0)
+                    direction = degenerate_dir(Vp.col(0));
+            }
+            else
+                Vu.col(i) = eig_vecs.col(i);            
+        }
         
+        Eigen::Matrix<double, 6, 1> Xf, Xu, Xp;
         Eigen::Vector3d t_temp, a_temp;
         Eigen::Matrix<double, 6, 1> delta_x;
         for (int i = 0; i < 3; i++)
         {
-            a_temp(i) = matX0.at<double>(i, 0);
-            t_temp(i) = matX0.at<double>(i + 3, 0);
-            delta_x(i) = matX0.at<double>(i, 0);
-            delta_x(i + 3) = matX0.at<double>(i + 3, 0);
+            Xf(i) = matX.at<double>(i, 0);
+            Xf(i + 3) = matX.at<double>(i + 3, 0);
+            delta_x(i) = matX.at<double>(i, 0);
+            delta_x(i + 3) = matX.at<double>(i + 3, 0);
         }
+
+        Xu = Xf;
+        Xp.setZero();
+        if (direction != -1)
+        {
+            std::cout<<"--------------->          "<<direction<<std::endl;
+            Xu(direction) = 0;
+            Xp(direction) = Xf(direction);
+        }
+        
+        Xf = Vf.transpose().inverse() * Vp.transpose() * Xp + Vf.transpose().inverse() * Vu.transpose() * Xu;
+        a_temp = Xf.block<3, 1>(0, 0);
+        t_temp = Xf.block<3, 1>(3, 0);
         
         cost_ori = cost_func(line_, plane_, tarA_, curPt_, q_last * toQuaterniond(a_inc), q_last * t_inc + t_last);
         cost_aft = cost_func(line_, plane_, tarA_, curPt_, q_last * toQuaterniond(a_inc + a_temp), q_last * (t_inc + t_temp) + t_last);

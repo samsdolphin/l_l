@@ -124,4 +124,19 @@ double cost_func(std::vector<Eigen::Vector3d> line,
     return cost;
 }
 
+int degenerate_dir(Eigen::Matrix<double, 6, 1> vec)
+{
+    int dir = -1;
+    double max_v = -1e6;
+    for (int i = 0; i < 6; i++)
+    {
+        if (std::abs(vec(i)) > max_v)
+        {
+            dir = i;
+            max_v = std::abs(vec(i));
+        }
+    }
+    return dir;
+}
+
 #endif // UTILS_MATH_HPP
